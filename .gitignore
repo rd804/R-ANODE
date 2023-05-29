@@ -5,12 +5,18 @@ __pycache__/
 
 # C extensions
 *.so
-data
-results
-logs
-models
-figures
+
 # Distribution / packaging
+data/*
+figures/*
+models/*
+results/*
+
+!data/.gitkeep
+!figures/.gitkeep
+!models/.gitkeep
+!results/.gitkeep
+
 .Python
 build/
 develop-eggs/
