@@ -89,10 +89,12 @@ def train(model,optimizer,train_loader,noise_data=0,noise_context=0):
 #        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.01)
         
         optimizer.step()
-       # pbar.update(data.size(0))
-       # pbar.set_description('Train, Log likelihood in nats: {:.6f}'.format(
-        #    train_loss / (batch_idx + 1)))
 
+    train_loss=train_loss.cpu().detach().numpy()
+    train_loss=train_loss/len(train_loader.dataset)
+
+    return train_loss
+    
 
 # validation
 

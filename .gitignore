@@ -11,6 +11,8 @@ data/*
 figures/*
 models/*
 results/*
+logs/*
+wandb/*
 
 !data/.gitkeep
 !figures/.gitkeep
