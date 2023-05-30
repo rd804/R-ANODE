@@ -8,14 +8,10 @@ import torch.nn.functional as F
 from nflows.distributions import uniform
 
 
-CUDA = True
-device = torch.device("cuda:0" if CUDA else "cpu")
-
-kwargs = {'num_workers': 4, 'pin_memory': True} if CUDA else {}
-kwargs = {}
 
 
-def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,dropout=0.05,nembedding=20,nfeatures=2):
+def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,dropout=0.05,nembedding=20,nfeatures=2,
+                 device='cpu'):
 
     init_id=True    
     
@@ -63,7 +59,7 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,drop
 
 # training
 
-def train(model,optimizer,train_loader,noise_data=0,noise_context=0):
+def train(model,optimizer,train_loader,noise_data=0,noise_context=0, device='cpu'):
     
     model.train()
     train_loss = 0
@@ -90,7 +86,7 @@ def train(model,optimizer,train_loader,noise_data=0,noise_context=0):
         
         optimizer.step()
 
-    train_loss=train_loss.cpu().detach().numpy()
+    train_loss=train_loss
     train_loss=train_loss/len(train_loader.dataset)
 
     return train_loss
@@ -98,7 +94,7 @@ def train(model,optimizer,train_loader,noise_data=0,noise_context=0):
 
 # validation
 
-def val(model,val_loader):
+def val(model,val_loader,device='cpu'):
 
     valloss=0
     model.eval()

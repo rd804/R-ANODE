@@ -8,14 +8,18 @@
 #SBATCH --cpus-per-task=1         # Cores per task (>1 if multithread tasks)
 #SBATCH --gres=gpu:1              # Number of GPUs per node
 #SBATCH --mem=2000                # Real memory (RAM) required (MB)
-#SBATCH --array=0-9               # Uncomment if you want to run multiple jobs
 #SBATCH --time=02:00:00           # Total run time limit (HH:MM:SS)
-#SBATCH --output=/scratch/rd804/m-anode/logs/output/slurm.%N.%a.out  # STDOUT output file
-#SBATCH --error=/scratch/rd804/m-anode/logs/error/slurm.%N.%a.err   # STDERR output file (optional)
+
 
 cd /scratch/rd804/m-anode/
-#conda activate manode
 
-python scripts/nflows_mixture.py --try $SLURM_ARRAY_TASK_ID
+source ~/.bashrc
+conda activate manode
+
+try_=$1
+group_name=$2
+job_type=$3
+
+python scripts/nflows_CR.py --try ${try_} --epochs 100 --wandb_group ${group_name} --wandb_job_type ${job_type}
 
 
