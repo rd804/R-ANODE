@@ -1,0 +1,5 @@
+[default]
+entity = rd804
+project = m-anode
+base_url = https://api.wandb.ai
+
