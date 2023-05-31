@@ -57,6 +57,35 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,drop
     
     return model
 
+def m_anode(model_S,model_B,w,optimizer,SR_loader,CR_loader,noise_data=0,noise_context=0, device='cpu'):
+    
+    model_S.train()
+    model_B.train()
+    
+    CR_loss = 0
+    SR_loss = 0
+
+    for batch_idx, data in enumerate(CR_loader):
+        data = data.to(device)
+        optimizer.zero_grad()
+        loss = -model_B.log_prob(data).sum()
+        CR_loss += loss.item()
+        loss.backward()
+        optimizer.step()
+
+    for batch_idx, data in enumerate(SR_loader):
+        data = data.to(device)
+        optimizer.zero_grad()
+        p = w * torch.exp(model_S.log_prob(data)) + (1 - w) * torch.exp(model_B.log_prob(data))
+        loss = -torch.log(p).sum()
+        SR_loss += loss.item()
+        loss.backward()
+        optimizer.step()
+
+    return CR_loss, SR_loss
+
+
+
 # training
 
 def train(model,optimizer,train_loader,noise_data=0,noise_context=0, device='cpu'):
