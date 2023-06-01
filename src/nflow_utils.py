@@ -131,7 +131,7 @@ def val(model,val_loader,device='cpu'):
 
         for batch_idx, data in enumerate(val_loader):
             data = data.to(device)
-            valloss+=-model.log_prob(data).sum()
+            valloss+=-model.log_prob(data).mean()
 #            print(valloss)
 #            cond_data = cond_data.float()
 #            cond_data = cond_data.to(device)

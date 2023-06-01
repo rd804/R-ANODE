@@ -95,7 +95,7 @@ test_loader = torch.utils.data.DataLoader(test_tensor, batch_size=batch_size*6, 
 
 
 # define normalizing flow model
-model_background=define_model(nfeatures=1,nhidden=2,hidden_size=20,
+model_background=define_model(nfeatures=1,nhidden=2,hidden_size=5,
                               embedding=None,dropout=0,nembedding=0
                               ,device=device)
 
@@ -134,16 +134,22 @@ print('min epoch CR: ',min_epoch)
 
 model_background.load_state_dict(torch.load(save_path+'model_CR_'+str(min_epoch)+'.pt'))
 torch.save(model_background.state_dict(), save_path+'model_CR_best.pt')
+
+bins = np.linspace(min(x_test), max(x_test), 50)
+
 model_background.eval()
 with torch.no_grad():
         samples_background=model_background.sample(50000)
+        density_background = np.exp(model_background.log_prob(torch.from_numpy(bins.astype('float32').reshape((-1,1))).to(device)).cpu().detach().numpy())
+
 samples_background=samples_background.cpu().detach().numpy().reshape((-1))
 
 # plot density estimation
 figure=plt.figure()
-_=plt.hist(samples_background,bins=50, density=True, histtype='step', label='nflow')
+_=plt.hist(samples_background,bins=50, density=True, histtype='step', label='nflow sample')
 _=plt.hist(background_val,bins=50, density=True, histtype='step', label='valdata')
 _=plt.hist(background_train,bins=50, density=True, histtype='step', label='traindata')
+_=plt.plot(bins,density_background,label='nflow density')
 plt.legend(loc='upper right')
 plt.savefig(save_path+'nflow_CR.png')
 
@@ -157,6 +163,8 @@ with torch.no_grad():
     p = np.exp(log_p)
 
 np.save(save_path+'best_val_loss_scores.npy', p)
+
+
 
 wandb.finish()
 
