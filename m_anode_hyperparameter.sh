@@ -21,5 +21,4 @@ do
         --clip_grad=${clip} --epochs=30 --gpu=${cuda_device} --wandb_group='nflows_gaussian_mixture_1' \
         --wandb_job_type='m_anode_hyperparam_test' --wandb_run_name='${loss_}_clip_grad_${clip}' --loss=${loss_} &
     done
-    wait
 done
