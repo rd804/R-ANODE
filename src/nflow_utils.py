@@ -57,32 +57,59 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,drop
     
     return model
 
-def m_anode(model_S,model_B,w,optimizer,SR_loader,CR_loader,noise_data=0,noise_context=0, device='cpu'):
+
+
+def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0, device='cpu', mode='train'):
     
-    model_S.train()
-    model_B.train()
-    
-    CR_loss = 0
-    SR_loss = 0
 
-    for batch_idx, data in enumerate(CR_loader):
+    if mode == 'train':
+        model_S.train()
+        model_B.train()
+        w.requires_grad = True
+
+    else:
+        model_S.eval()
+        model_B.eval()
+        w.requires_grad = False
+
+    total_loss = 0
+
+    for batch_idx, data_ in enumerate(data_loader):
+        data, label = data_
         data = data.to(device)
-        optimizer.zero_grad()
-        loss = -model_B.log_prob(data).sum()
-        CR_loss += loss.item()
-        loss.backward()
-        optimizer.step()
+        label = label.to(device)
+        label  = label.reshape(-1,)
+        if mode == 'train':
+            optimizer.zero_grad()
 
-    for batch_idx, data in enumerate(SR_loader):
-        data = data.to(device)
-        optimizer.zero_grad()
-        p = w * torch.exp(model_S.log_prob(data)) + (1 - w) * torch.exp(model_B.log_prob(data))
-        loss = -torch.log(p).sum()
-        SR_loss += loss.item()
-        loss.backward()
-        optimizer.step()
+      #  print(data[label==1].shape)
+       # print(data[label==0].shape)
+       # print(data.shape)
+       # print(label.shape)    
+       # print(label.shape)
+        
+       # data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
+        data_loss = w * model_S.log_prob(data[label==1]) + (1-w) * model_B.log_prob(data[label==1])
+       # data_loss = -torch.log(data_p) 
+        
+        background_loss = -model_B.log_prob(data[label==0])
 
-    return CR_loss, SR_loss
+        
+
+
+      #  print('Value of w: ', w.item())
+
+        loss = -data_loss.sum() + background_loss.sum()
+
+        #print(loss)
+#
+        total_loss += loss.item()
+        if mode == 'train':
+            loss.backward()
+            optimizer.step()
+
+
+    return total_loss
 
 
 

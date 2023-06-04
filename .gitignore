@@ -13,11 +13,17 @@ models/*
 results/*
 logs/*
 wandb/*
+data.pkl
+background.pkl
+true_w.pkl
 
 !data/.gitkeep
 !figures/.gitkeep
 !models/.gitkeep
 !results/.gitkeep
+!data/data.pkl
+!data/background.pkl
+!data/true_w.pkl
 
 .Python
 build/
