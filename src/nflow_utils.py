@@ -59,13 +59,17 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,drop
 
 
 
-def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0, device='cpu', mode='train'):
+def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0, device='cpu', mode='train',mode_background='train', clip_grad=False):
     
 
     if mode == 'train':
         model_S.train()
-        model_B.train()
         w.requires_grad = True
+
+        if mode_background == 'train':
+            model_B.train()
+        else:
+            model_B.eval()
 
     else:
         model_S.eval()
@@ -82,14 +86,9 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
         if mode == 'train':
             optimizer.zero_grad()
 
-      #  print(data[label==1].shape)
-       # print(data[label==0].shape)
-       # print(data.shape)
-       # print(label.shape)    
-       # print(label.shape)
         
        # data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
-        data_loss = w * model_S.log_prob(data[label==1]) + (1-w) * model_B.log_prob(data[label==1])
+        data_loss = torch.sigmoid(w) * model_S.log_prob(data[label==1]) + (1-torch.sigmoid(w)) * model_B.log_prob(data[label==1])
        # data_loss = -torch.log(data_p) 
         
         background_loss = -model_B.log_prob(data[label==0])
@@ -105,6 +104,10 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
 #
         total_loss += loss.item()
         if mode == 'train':
+            if clip_grad:
+                torch.nn.utils.clip_grad_norm_(model_S.parameters(), clip_grad)
+                torch.nn.utils.clip_grad_norm_(model_B.parameters(), clip_grad)
+                torch.nn.utils.clip_grad_norm_([w], clip_grad)
             loss.backward()
             optimizer.step()
 
