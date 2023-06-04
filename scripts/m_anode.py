@@ -23,6 +23,8 @@ parser.add_argument('--sig_test', default=10)
 parser.add_argument('--mode_background', type=str, default='train')
 parser.add_argument('--clip_grad', type=float, default=0.1)
 parser.add_argument('--epochs', type=int, default=20)
+parser.add_argument('--data_loss_expr', type=str, default='true_likelihood')
+parser.add_argument('--w', type=float, default=0.0)
 parser.add_argument('--gpu', type=str, default='cuda:0')
 parser.add_argument('--wandb_group', type=str, default='test')
 parser.add_argument('--wandb_job_type', type=str, default='CR')
@@ -91,9 +93,6 @@ x_test = data[str(args.sig_test)]['val']['data']
 label_test = data[args.sig_test]['val']['label']
 
 
-# %%
-# define X_train y_train to be used for loading to dataloader
-
 batch_size = 128
 
 X_train = torch.from_numpy(X_train.reshape(-1,1)).float()
@@ -110,11 +109,10 @@ valloader = torch.utils.data.DataLoader(valdataset, batch_size=batch_size*5, shu
 
 testtensor = torch.from_numpy(x_test.reshape(-1,1)).float()
 
-# %%
 model_S=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0, device=device)
 model_B=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0, device=device)
 
-w = torch.tensor(0, requires_grad=True, device=device)
+w = torch.tensor(args.w, requires_grad=True, device=device)
 
 optimizer = torch.optim.Adam(list(model_S.parameters()) + list(model_B.parameters()) + [w])
 
@@ -122,34 +120,46 @@ optimizer = torch.optim.Adam(list(model_S.parameters()) + list(model_B.parameter
 valloss = []
 trainloss = []
 
+if not os.path.exists('models'):
+    os.makedirs('models')
+
+if not os.path.exists('results/' + wandb.run.name):
+    os.makedirs('results/' + wandb.run.name)
+
 
 for epoch in range(args.epochs):
 
-    train_loss = m_anode(model_S,model_B,w,optimizer,trainloader,noise_data=0,noise_context=0, device=device, mode='train',
-                         mode_background=args.mode_background, clip_grad=args.clip_grad)
-    val_loss = m_anode(model_S,model_B,w,optimizer,valloader,noise_data=0,noise_context=0, device=device, mode='val',
-                       mode_background=args.mode_background, clip_grad=args.clip_grad)
+    train_loss = m_anode(model_S,model_B,w,optimizer,trainloader,noise_data=0,noise_context=0, device=device, mode='train',\
+                         mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr)
+    val_loss = m_anode(model_S,model_B,w,optimizer,valloader,noise_data=0,noise_context=0, device=device, mode='val',\
+                       mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr)
 
 
     print('epoch: %d, train_loss: %.3f, val_loss: %.3f' % (epoch, train_loss, val_loss))
 
-    if train_loss == np.nan or val_loss == np.nan:
+    # save model
+    
+
+    if np.isnan(train_loss) or np.isnan(val_loss):
         print(' nan loss ')
         wandb.finish()
         break
+
+    wandb.log({'train_loss': train_loss, 'val_loss': val_loss})
 
     valloss.append(val_loss)
     trainloss.append(train_loss)
 
 
- #   if epoch % 5 == 0:
-  #      torch.save(model_S.state_dict(), 'models/model_S_%d_%d.pth' % (sig_train, epoch))
-   #     torch.save(model_B.state_dict(), 'models/model_B_%d_%d.pth' % (sig_train, epoch))
-    #    torch.save(w, 'models/w_%d_%d.pth' % (sig_train, epoch))
+print(np.isnan(train_loss), np.isnan(val_loss))
 
 
+if ~np.isnan(train_loss) or ~np.isnan(val_loss):
 
-if train_loss != np.nan or val_loss != np.nan:
+    torch.save(model_S.state_dict(), 'results/' + wandb.run.name + '/model_S.pt')
+    torch.save(model_B.state_dict(), 'results/' + wandb.run.name + '/model_B.pt')
+    w_ = torch.sigmoid(w).item()
+    np.save('results/' + wandb.run.name + '/w.npy', w_)
 
     with torch.no_grad():
         samples_S=model_S.sample(50000)
@@ -157,9 +167,11 @@ if train_loss != np.nan or val_loss != np.nan:
     samples_S=samples_S.cpu().detach().numpy().reshape((-1))
     samples_B=samples_B.cpu().detach().numpy().reshape((-1))
 
+
+    bins = np.linspace(-10,10,50)
     figure = plt.figure()
-    plt.plot(samples_S, label='S')
-    plt.plot(samples_B, label='B')
+    plt.hist(samples_S, bins = bins, label='S', histtype='step')
+    plt.hist(samples_B, bins = bins, label='B', histtype='step')
     plt.legend()
 
     wandb.log({'samples': wandb.Image(figure)})
@@ -168,7 +180,6 @@ if train_loss != np.nan or val_loss != np.nan:
 
 
     true_likelihoods = {}
-
     true_likelihoods[str(sig_train)] = {}
 
 
@@ -178,14 +189,11 @@ if train_loss != np.nan or val_loss != np.nan:
     true_likelihoods[str(sig_train)] = p_data(x_test,[sig_mean, back_mean],[sig_simga**2,back_sigma**2],[w1,w2])/p_back(x_test,back_mean,back_sigma**2)
 
 
-
-    # %%
     score_likelihoods = {}
-
     score_likelihoods[str(sig_train)] = {}
-
-
     w_ = torch.sigmoid(w).item()
+
+    wandb.log({'Learned weight': w_})
 
     model_S.eval()
     model_B.eval()
@@ -196,9 +204,11 @@ if train_loss != np.nan or val_loss != np.nan:
         data  = w_ * np.exp(log_S) + (1-w_) * np.exp(log_B)
         back = np.exp(log_B)
 
+        likelihood_ = data/back
 
+        likelihood_ = np.nan_to_num(likelihood_, nan=0, posinf=0, neginf=0)
 
-        score_likelihoods[str(sig_train)] = data/back
+        score_likelihoods[str(sig_train)] = likelihood_
         
 
     sic_true , tpr_true , auc_true = SIC(label_test, true_likelihoods[str(sig_train)])
@@ -208,6 +218,7 @@ if train_loss != np.nan or val_loss != np.nan:
 
     plt.plot(tpr_true, sic_true, label='true')
     plt.plot(tpr_score, sic_score, label='score')
+
     plt.legend(loc='lower right')
     wandb.log({'SIC': wandb.Image(plt)})
     plt.show()
