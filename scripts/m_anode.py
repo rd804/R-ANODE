@@ -21,7 +21,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--sig_train',  default=10)
 parser.add_argument('--sig_test', default=10)
 parser.add_argument('--mode_background', type=str, default='train')
-parser.add_argument('--clip_grad', type=float, default=0.1)
+parser.add_argument('--lr', type=float, default=1e-3)
+parser.add_argument('--clip_grad', default=False)
 parser.add_argument('--epochs', type=int, default=20)
 parser.add_argument('--data_loss_expr', type=str, default='true_likelihood')
 parser.add_argument('--w', type=float, default=0.0)
@@ -39,6 +40,9 @@ wandb.init(project="m-anode", config=args,
               group=args.wandb_group, job_type=args.wandb_job_type)
 
 wandb.run.name = args.wandb_run_name
+
+
+# print wandb group
 
 
 CUDA = True
@@ -63,13 +67,10 @@ with open('data/background.pkl', 'rb') as f:
     background = pickle.load(f)
 
 
-# fit train data
-best_parameters = {}
-run = 0
 
 sig_train = 10
 
-best_parameters[str(sig_train)] = {}
+
 
 # Load train data
 x_train = data[str(sig_train)]['train']['data']
@@ -114,17 +115,37 @@ model_B=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout
 
 w = torch.tensor(args.w, requires_grad=True, device=device)
 
-optimizer = torch.optim.Adam(list(model_S.parameters()) + list(model_B.parameters()) + [w])
+
+if args.mode_background == 'train':
+    optimizer = torch.optim.Adam(list(model_S.parameters()) + list(model_B.parameters()) + [w], lr=args.lr)
+elif args.mode_background == 'freeze':
+    valloss = np.load('results/nflows_gaussian_mixture_1/CR/try_0/valloss_list_background.npy')
+
+    index = np.argmin(valloss).flatten()[0]
+
+    model_B.load_state_dict(torch.load(f'results/nflows_gaussian_mixture_1/CR/try_0/model_CR_{index}.pt'))
+    model_B.eval()
+    optimizer = torch.optim.Adam(list(model_S.parameters()) + [w], lr=args.lr)
+
+elif args.mode_background == 'pretrained':
+    valloss = np.load('results/nflows_gaussian_mixture_1/CR/try_0/valloss_list_background.npy')
+
+    index = np.argmin(valloss).flatten()[0]
+
+    model_B.load_state_dict(torch.load(f'results/nflows_gaussian_mixture_1/CR/try_0/model_CR_{index}.pt'))
+
+    optimizer = torch.optim.Adam(list(model_S.parameters()) + list(model_B.parameters()) + [w], lr=args.lr)
+
+
+
 
 
 valloss = []
 trainloss = []
 
-if not os.path.exists('models'):
-    os.makedirs('models')
 
-if not os.path.exists('results/' + wandb.run.name):
-    os.makedirs('results/' + wandb.run.name)
+if not os.path.exists(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}'):
+    os.makedirs(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}')
 
 
 for epoch in range(args.epochs):
@@ -135,48 +156,47 @@ for epoch in range(args.epochs):
                        mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr)
 
 
-    print('epoch: %d, train_loss: %.3f, val_loss: %.3f' % (epoch, train_loss, val_loss))
+    w_ = torch.sigmoid(w).item()
 
-    # save model
+
+    ##################################
+    ##############################
+    # Save model and weights
+
+    torch.save(model_S.state_dict(), f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/model_S_{epoch}.pt')
+    np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/w_{epoch}.npy', w_)
+
+    if args.mode_background == 'train' or args.mode_background == 'pretrained':
+        torch.save(model_B.state_dict(), f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/model_B_{epoch}.pt')
+
     
+    
+
 
     if np.isnan(train_loss) or np.isnan(val_loss):
         print(' nan loss ')
         wandb.finish()
         break
 
-    wandb.log({'train_loss': train_loss, 'val_loss': val_loss})
+    wandb.log({'train_loss': train_loss, 'val_loss': val_loss, 'w': w_ , \
+               'true_w': true_w[str(sig_train)][0]})
 
     valloss.append(val_loss)
     trainloss.append(train_loss)
 
 
-print(np.isnan(train_loss), np.isnan(val_loss))
-
 
 if ~np.isnan(train_loss) or ~np.isnan(val_loss):
+    np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/valloss.npy', valloss)
+    np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/trainloss.npy', trainloss)
 
-    torch.save(model_S.state_dict(), 'results/' + wandb.run.name + '/model_S.pt')
-    torch.save(model_B.state_dict(), 'results/' + wandb.run.name + '/model_B.pt')
-    w_ = torch.sigmoid(w).item()
-    np.save('results/' + wandb.run.name + '/w.npy', w_)
+    # Load best model
+    index = np.argmin(valloss).flatten()[0]
+    model_S.load_state_dict(torch.load(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/model_S_{index}.pt'))
+    w_ = np.load(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/w_{index}.npy')
 
-    with torch.no_grad():
-        samples_S=model_S.sample(50000)
-        samples_B=model_B.sample(50000)
-    samples_S=samples_S.cpu().detach().numpy().reshape((-1))
-    samples_B=samples_B.cpu().detach().numpy().reshape((-1))
-
-
-    bins = np.linspace(-10,10,50)
-    figure = plt.figure()
-    plt.hist(samples_S, bins = bins, label='S', histtype='step')
-    plt.hist(samples_B, bins = bins, label='B', histtype='step')
-    plt.legend()
-
-    wandb.log({'samples': wandb.Image(figure)})
-    plt.show()
-
+    if args.mode_background == 'train' or args.mode_background == 'pretrained':
+        model_B.load_state_dict(torch.load(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/model_B_{index}.pt'))
 
 
     true_likelihoods = {}
@@ -191,9 +211,8 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
 
     score_likelihoods = {}
     score_likelihoods[str(sig_train)] = {}
-    w_ = torch.sigmoid(w).item()
 
-    wandb.log({'Learned weight': w_})
+    wandb.log({'Best learned weight': w_})
 
     model_S.eval()
     model_B.eval()
@@ -220,10 +239,31 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
     plt.plot(tpr_score, sic_score, label='score')
 
     plt.legend(loc='lower right')
-    wandb.log({'SIC': wandb.Image(plt)})
+    wandb.log({'SIC': wandb.Image(figure)})
+    plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/SIC.png')
+    plt.show()
+
+
+    figure = plt.figure()
+    bins = np.linspace(min(X_train), max(X_train), 100).flatten()
+    Background = model_B.log_prob(torch.from_numpy(bins.reshape(-1,1)).float().to(device)).exp().detach().cpu().numpy()
+    Signal = model_S.log_prob(torch.from_numpy(bins.reshape(-1,1)).float().to(device)).exp().detach().cpu().numpy()
+
+    Data = w_ * Signal + (1-w_) * Background
+
+    plt.plot(bins, Background, label='model B')
+    plt.plot(bins, Signal, label='model S')
+    plt.plot(bins, Data, label='w * S + (1-w) * B with w=%.3f' % w_)
+    plt.hist(X_train[y_train==0], bins=bins, label='back' , density=True, histtype='step')
+    plt.hist(X_train[y_train==1], bins=bins, label='data', density=True, histtype='step')
+    plt.legend(frameon=False)
+    wandb.log({'model': wandb.Image(figure)})
+    plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/model.png')
     plt.show()
 
     wandb.finish()
+
+
 
 
 

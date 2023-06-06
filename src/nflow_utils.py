@@ -60,15 +60,17 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,drop
 
 
 def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0, device='cpu', mode='train',mode_background='train', clip_grad=False,
-            data_loss_expr = 'expectation_likelihood'):
+            data_loss_expr = 'true_likelihood', 
+            ):
     
 
     if mode == 'train':
         model_S.train()
         w.requires_grad = True
 
-        if mode_background == 'train':
+        if mode_background == 'train' or mode_background == 'pretrained':
             model_B.train()
+            print('training both models')
         else:
             model_B.eval()
 
@@ -87,30 +89,41 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
         if mode == 'train':
             optimizer.zero_grad()
 
-        
+        # define data losses for signal and background
         if data_loss_expr == 'expectation_likelihood':
             data_loss = torch.sigmoid(w) * model_S.log_prob(data[label==1]) + (1-torch.sigmoid(w)) * model_B.log_prob(data[label==1])
         elif data_loss_expr == 'true_likelihood':
-            data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
-            data_loss = torch.log(data_p)
+            data_p = (1-torch.sigmoid(w)) * torch.exp(model_S.log_prob(data[label==1])) + (torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
+            data_loss = torch.log(data_p + 1e-32)
+
+        elif data_loss_expr == 'true_likelihood_with_KLD':
+            pass
         else:
             raise ValueError('data_loss must be either expectation_likelihood or true_likelihood')
         
         background_loss = -model_B.log_prob(data[label==0])
-        loss = -data_loss.sum() + background_loss.sum()
+        loss = -data_loss.sum() + background_loss.sum() 
+
+        if np.isnan(loss.item()):
+            break
 
         total_loss += loss.item()
+
+
+
         if mode == 'train':
             if clip_grad:
                 torch.nn.utils.clip_grad_norm_(model_S.parameters(), clip_grad)
                 torch.nn.utils.clip_grad_norm_([w], clip_grad)
 
 
-                if mode_background == 'train':
+                if mode_background == 'train' or mode_background == 'pretrained':
                     torch.nn.utils.clip_grad_norm_(model_B.parameters(), clip_grad)
             loss.backward()
             optimizer.step()
 
+
+ 
 
     return total_loss
 
