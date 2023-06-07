@@ -60,8 +60,7 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,drop
 
 
 def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0, device='cpu', mode='train',mode_background='train', clip_grad=False,
-            data_loss_expr = 'true_likelihood', 
-            ):
+            data_loss_expr = 'true_likelihood' ):
     
 
     if mode == 'train':
