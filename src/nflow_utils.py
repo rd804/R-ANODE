@@ -93,7 +93,7 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
         if data_loss_expr == 'expectation_likelihood':
             data_loss = torch.sigmoid(w) * model_S.log_prob(data[label==1]) + (1-torch.sigmoid(w)) * model_B.log_prob(data[label==1])
         elif data_loss_expr == 'true_likelihood':
-            data_p = (1-torch.sigmoid(w)) * torch.exp(model_S.log_prob(data[label==1])) + (torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
+            data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
             data_loss = torch.log(data_p + 1e-32)
 
         elif data_loss_expr == 'true_likelihood_with_KLD':

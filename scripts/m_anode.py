@@ -66,11 +66,7 @@ with open('data/true_w.pkl', 'rb') as f:
 with open('data/background.pkl', 'rb') as f:
     background = pickle.load(f)
 
-
-
-sig_train = 10
-
-
+sig_train = args.sig_train
 
 # Load train data
 x_train = data[str(sig_train)]['train']['data']
