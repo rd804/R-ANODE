@@ -60,13 +60,15 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,drop
 
 
 def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0, device='cpu', mode='train',mode_background='train', clip_grad=False,
-            data_loss_expr = 'true_likelihood' ):
+            data_loss_expr = 'true_likelihood', w_train = True ):
     
 
     if mode == 'train':
         model_S.train()
-        w.requires_grad = True
 
+        w.requires_grad = w_train
+        
+            
         if mode_background == 'train' or mode_background == 'pretrained':
             model_B.train()
             print('training both models')
@@ -96,7 +98,21 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
             data_loss = torch.log(data_p + 1e-32)
 
         elif data_loss_expr == 'true_likelihood_with_KLD':
-            pass
+
+            p_s = torch.exp(model_S.log_prob(data[label==1]))
+            p_b = torch.exp(model_B.log_prob(data[label==1]))
+            w_ = torch.sigmoid(w)
+
+            data_p = w_ * p_s + (1-w_) * p_b
+            data_loss = torch.log(data_p + 1e-32)
+
+            # add KLD
+           # data_loss += ( p_s * w_ ) * (torch.log(w_ * p_s) - \
+            #                             torch.log( (1-w_) * p_b))
+            data_loss += 0.5* p_s * (torch.log(p_s) - \
+                                            torch.log(p_b))
+
+
         else:
             raise ValueError('data_loss must be either expectation_likelihood or true_likelihood')
         
@@ -113,7 +129,8 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
         if mode == 'train':
             if clip_grad:
                 torch.nn.utils.clip_grad_norm_(model_S.parameters(), clip_grad)
-                torch.nn.utils.clip_grad_norm_([w], clip_grad)
+                if w_train:
+                    torch.nn.utils.clip_grad_norm_([w], clip_grad)
 
 
                 if mode_background == 'train' or mode_background == 'pretrained':
@@ -125,6 +142,84 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
  
 
     return total_loss
+
+
+def m_anode_EM(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0, device='cpu', mode='train',mode_background='train', clip_grad=False,
+            data_loss_expr = 'true_likelihood', w_train = True ):
+    
+    '''EM algorithm for model_S and model_B'''
+
+    if mode == 'train':
+        model_S.train()
+
+        if w_train:
+            w.requires_grad = True
+        else:
+            w.requires_grad = False
+            
+        if mode_background == 'train' or mode_background == 'pretrained':
+            model_B.train()
+            print('training both models')
+        else:
+            model_B.eval()
+
+    else:
+        model_S.eval()
+        model_B.eval()
+        w.requires_grad = False
+
+    total_loss = 0
+
+    # Initialize the weights
+    
+
+    for batch_idx, data_ in enumerate(data_loader):
+        # E-step
+        data, label = data_
+        data = data.to(device)
+        label = label.to(device)
+        label  = label.reshape(-1,)
+
+
+        with torch.no_grad():
+            p_x_b = torch.exp(model_B.log_prob(data))
+            p_x_s = torch.exp(model_S.log_prob(data))
+
+
+
+            p_b_x = p_x_b * (1-w) / (p_x_b * (1-w) + p_x_s * w)
+            p_s_x = 1 - p_b_x
+           
+           
+            p_b = p_b_x.mean()
+            p_s = 1.0 - p_b
+
+            print('p_b: ', p_b.item(), 'p_s: ', p_s.item())
+
+            # w = torch.nan_to_num(p_s, nan=0.0, posinf=0.0, neginf=0.0)
+
+        if mode == 'train':
+            optimizer.zero_grad()
+
+
+
+        # M-step
+        # define data losses for signal and background
+        if data_loss_expr == 'expectation_likelihood':
+            data_loss = p_s_x[label==1] * model_S.log_prob(data[label==1]) + p_b_x[label==1] * model_B.log_prob(data[label==1])
+        else:
+            pass
+
+        loss = -data_loss.sum()
+
+        print('w: ', w.item(), 'loss: ', loss.item())
+
+        if np.isnan(loss.item()):
+            break
+
+        total_loss += loss.item()
+
+    return total_loss, w
 
 
 
