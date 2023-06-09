@@ -1,5 +1,3 @@
-
-# %%
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
@@ -18,19 +16,20 @@ import wandb
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--sig_train',  default=10)
-parser.add_argument('--sig_test', default=10)
-parser.add_argument('--mode_background', type=str, default='train')
-parser.add_argument('--lr', type=float, default=1e-3)
-parser.add_argument('--clip_grad', default=False)
-parser.add_argument('--epochs', type=int, default=20)
+parser.add_argument('--sig_train',  default=10, help='signal train')
+parser.add_argument('--sig_test', default=10, help='signal test')
+parser.add_argument('--mode_background', type=str, default='train', help='train, freeze, pretrained')
+parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
+parser.add_argument('--clip_grad', default=False, help='clip grad')
+parser.add_argument('--epochs', type=int, default=20, help='epochs')
+parser.add_argument('--true_w', action='store_true', help='use true w, as initial value for w')
 
-parser.add_argument('--data_loss_expr', type=str, default='true_likelihood')
-parser.add_argument('--w', type=float, default=0.0)
-parser.add_argument('--gpu', type=str, default='cuda:0')
-parser.add_argument('--w_train', type=bool, default=True)
-parser.add_argument('--cap_sig', type=float, default=1.0)
-parser.add_argument('--scale_sig', type=float, default=1.0)
+parser.add_argument('--data_loss_expr', type=str, default='true_likelihood', help='loss for SR region')
+parser.add_argument('--w', type=float, default=0.0, help='initial for SR region')
+parser.add_argument('--gpu', type=str, default='cuda:0', help='gpu to train on')
+parser.add_argument('--w_train', action='store_true', help='train w if true, else fix w to initial value value')
+parser.add_argument('--cap_sig', type=float, default=1.0, help='capping the maximum value of sigmoid function for w: (cap_sig)/(1+exp(-x))')
+parser.add_argument('--scale_sig', type=float, default=1.0, help='scaling the sigmoid function for w: 1/(1+exp(-scale_sig * w))')
 parser.add_argument('--kld_w', type=float, default=1.0)
 
 parser.add_argument('--wandb_group', type=str, default='test')
@@ -118,7 +117,10 @@ model_B=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout
 if args.w_train:
     w = torch.tensor(args.w, requires_grad=True, device=device)
 else:
-    w = torch.tensor(inverse_sigmoid(true_w[str(sig_train)][0]), requires_grad=False, device=device)
+    if args.true_w:
+        w = torch.tensor(inverse_sigmoid(true_w[str(sig_train)][0]), requires_grad=False, device=device)
+    else:
+        w = torch.tensor(inverse_sigmoid(args.w), requires_grad=False, device=device)
 
 
 if args.mode_background == 'train':
@@ -130,7 +132,10 @@ elif args.mode_background == 'freeze':
 
     model_B.load_state_dict(torch.load(f'results/nflows_gaussian_mixture_1/CR/try_0/model_CR_{index}.pt'))
     model_B.eval()
-    optimizer = torch.optim.Adam(list(model_S.parameters()) + [w], lr=args.lr)
+    if args.w_train:
+        optimizer = torch.optim.Adam(list(model_S.parameters()) + [w], lr=args.lr)
+    else:
+        optimizer = torch.optim.Adam(list(model_S.parameters()), lr=args.lr)
 
 elif args.mode_background == 'pretrained':
     valloss = np.load('results/nflows_gaussian_mixture_1/CR/try_0/valloss_list_background.npy')
@@ -250,6 +255,7 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
     plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/SIC.png')
     plt.show()
 
+    wandb.log({'AUC': auc_score, 'max SIC': np.max(sic_score)})
 
     figure = plt.figure()
     bins = np.linspace(min(X_train), max(X_train), 100).flatten()

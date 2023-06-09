@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.metrics import roc_curve, roc_auc_score
 from sklearn.cluster import KMeans
 from scipy.stats import norm
+import torch
 
 # SIC curve
 
@@ -275,5 +276,14 @@ def p_back(data,mu,sigma):
     pc = norm.pdf(data, mu, np.sqrt(sigma))
 
     return pc
+
+def inverse_sigmoid(x):
+    return np.log(x/(1-x))
+
+def capped_sigmoid(x, a):
+    return a/(1+torch.exp(-x))
+
+def scaled_sigmoid(x, a):
+    return 1/(1+torch.exp(- a * x))
 
 
