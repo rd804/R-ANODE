@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
-
+from src.utils import *
 from nflows import transforms, distributions, flows
 import torch
 import torch.nn.functional as F
@@ -60,7 +60,7 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,drop
 
 
 def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0, device='cpu', mode='train',mode_background='train', clip_grad=False,
-            data_loss_expr = 'true_likelihood', w_train = True ):
+            data_loss_expr = 'true_likelihood', w_train = True, cap_sig=1.0, scale_sig=1.0, kld_w = 1.0):
     
 
     if mode == 'train':
@@ -90,14 +90,44 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
         if mode == 'train':
             optimizer.zero_grad()
 
+        #############################################
+        ##############################################
+        # define data losses for SR
+        ##############################################
+        ##############################################
+
+
+
         # define data losses for signal and background
         if data_loss_expr == 'expectation_likelihood':
             data_loss = torch.sigmoid(w) * model_S.log_prob(data[label==1]) + (1-torch.sigmoid(w)) * model_B.log_prob(data[label==1])
+        
         elif data_loss_expr == 'true_likelihood':
             data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
             data_loss = torch.log(data_p + 1e-32)
 
-        elif data_loss_expr == 'true_likelihood_with_KLD':
+        elif data_loss_expr == 'capped_sigmoid':
+            data_p = capped_sigmoid(w,cap_sig) * torch.exp(model_S.log_prob(data[label==1])) + (1-capped_sigmoid(w,cap_sig)) * torch.exp(model_B.log_prob(data[label==1]))
+            data_loss = torch.log(data_p + 1e-32)
+
+        elif data_loss_expr == 'scaled_sigmoid':
+            data_p = scaled_sigmoid(w,scale_sig) * torch.exp(model_S.log_prob(data[label==1])) + (1-scaled_sigmoid(w,scale_sig)) * torch.exp(model_B.log_prob(data[label==1]))
+            data_loss = torch.log(data_p + 1e-32)
+
+        elif data_loss_expr == 'with_w_scaled_KLD':
+            p_s = torch.exp(model_S.log_prob(data[label==1]))
+            p_b = torch.exp(model_B.log_prob(data[label==1]))
+            w_ = torch.sigmoid(w)
+
+            data_p = w_ * p_s + (1-w_) * p_b
+            data_loss = torch.log(data_p + 1e-32)
+
+            data_loss += ( p_s * w_ ) * (torch.log(w_ * p_s) - \
+                                         torch.log( (1-w_) * p_b))
+
+            
+
+        elif data_loss_expr == 'with_w_weighted_KLD':
 
             p_s = torch.exp(model_S.log_prob(data[label==1]))
             p_b = torch.exp(model_B.log_prob(data[label==1]))
@@ -106,15 +136,29 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
             data_p = w_ * p_s + (1-w_) * p_b
             data_loss = torch.log(data_p + 1e-32)
 
-            # add KLD
-           # data_loss += ( p_s * w_ ) * (torch.log(w_ * p_s) - \
-            #                             torch.log( (1-w_) * p_b))
-            data_loss += 0.5* p_s * (torch.log(p_s) - \
-                                            torch.log(p_b))
+            data_loss += ( p_s * w_ ) * (torch.log(p_s) - \
+                                         torch.log(p_b))
+
+        elif data_loss_expr == 'with_self_weighted_KLD':
+            
+            p_s = torch.exp(model_S.log_prob(data[label==1]))
+            p_b = torch.exp(model_B.log_prob(data[label==1]))
+            w_ = torch.sigmoid(w)
+
+            data_p = w_ * p_s + (1-w_) * p_b
+
+            data_loss = (1-kld_w) * torch.log(data_p + 1e-32)
+
+            data_loss += kld_w * ( p_s * (torch.log(p_s) - \
+                                            torch.log(p_b)))
 
 
         else:
-            raise ValueError('data_loss must be either expectation_likelihood or true_likelihood')
+            raise ValueError('data_loss must be either expectation_likelihood , true_likelihood, capped_sigmoid, scaled_sigmoid, with_w_scaled_KLD, with_w_weighted_KLD, with_self_weighted_KLD')
+        
+        #############################################
+        ##############################################
+        
         
         background_loss = -model_B.log_prob(data[label==0])
         loss = -data_loss.sum() + background_loss.sum() 
@@ -152,10 +196,7 @@ def m_anode_EM(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_contex
     if mode == 'train':
         model_S.train()
 
-        if w_train:
-            w.requires_grad = True
-        else:
-            w.requires_grad = False
+        w.requires_grad = w_train
             
         if mode_background == 'train' or mode_background == 'pretrained':
             model_B.train()
@@ -206,11 +247,11 @@ def m_anode_EM(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_contex
         # M-step
         # define data losses for signal and background
         if data_loss_expr == 'expectation_likelihood':
-            data_loss = p_s_x[label==1] * model_S.log_prob(data[label==1]) + p_b_x[label==1] * model_B.log_prob(data[label==1])
+            data_loss = (p_s_x[label==1] * model_S.log_prob(data[label==1])).sum() + (p_b_x[label==1] * model_B.log_prob(data[label==1])).sum()
         else:
             pass
 
-        loss = -data_loss.sum()
+        loss = -data_loss
 
         print('w: ', w.item(), 'loss: ', loss.item())
 
