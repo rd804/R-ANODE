@@ -3,7 +3,7 @@
 all_sig=1
 arr=1	
 group="nflows_gaussian_mixture_1"
-job_type="m_anode_b_w_freeze_"
+job_type="m_anode_tailbound_20_b_w_freeze_"
 
 source ~/.bashrc
 conda activate manode

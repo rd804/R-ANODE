@@ -23,7 +23,7 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,drop
                        'random_mask':False,
                        'num_bins':nbins,
                        'tails':'linear',
-                       'tail_bound':10,
+                       'tail_bound':20,
                        'min_bin_width': 1e-6,
                        'min_bin_height': 1e-6,
                        'min_derivative': 1e-6}
