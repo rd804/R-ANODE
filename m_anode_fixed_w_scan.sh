@@ -14,7 +14,7 @@ do
     all_sig=()
 
 #    for sig in 5 0.1 0.2 0.5 0.8 0.9 1 2 1.5 10
-    for w_ in 0.1 0.01 0.001 0.0001
+    for w_ in 0.1 0.01 0.001 0.0001 0.002
     do
         echo "sigma = ${w_}"
         arr=()
