@@ -3,7 +3,7 @@
 all_sig=1
 arr=1	
 group="nflows_gaussian_mixture_1"
-job_type="m_anode_tailbound_20_b_w_freeze_"
+job_type="m_anode_tailbound_15_b_w_freeze_"
 
 source ~/.bashrc
 conda activate manode
@@ -14,7 +14,7 @@ do
     all_sig=()
 
 #    for sig in 5 0.1 0.2 0.5 0.8 0.9 1 2 1.5 10
-    for w_ in 0.1 0.01 0.001 0.0001 0.002
+    for w_ in 0.1 0.01 0.001 0.0001 0.002 0.003
     do
         echo "sigma = ${w_}"
         arr=()

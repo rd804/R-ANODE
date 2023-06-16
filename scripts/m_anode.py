@@ -162,8 +162,11 @@ for epoch in range(args.epochs):
                        mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr,
                        w_train=args.w_train, cap_sig=args.cap_sig, scale_sig=args.scale_sig, kld_w=args.kld_w)
 
-
-    w_ = torch.sigmoid(w).item()
+    if args.data_loss_expr == 'capped_sigmoid':
+        w_ = capped_sigmoid(w.item(), args.cap_sig)
+    elif args.data_loss_expr == 'scaled_sigmoid':
+        w_ = scaled_sigmoid(w.item(), args.scale_sig)
+    
 
 
     ##################################
