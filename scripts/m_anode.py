@@ -47,8 +47,7 @@ wandb.init(project="m-anode", config=args,
 
 wandb.run.name = args.wandb_run_name
 
-
-# print wandb group
+wandb.config['tailbound'] = 15
 
 
 CUDA = True
@@ -163,10 +162,11 @@ for epoch in range(args.epochs):
                        w_train=args.w_train, cap_sig=args.cap_sig, scale_sig=args.scale_sig, kld_w=args.kld_w)
 
     if args.data_loss_expr == 'capped_sigmoid':
-        w_ = capped_sigmoid(w.item(), args.cap_sig)
+        w_ = capped_sigmoid(w, args.cap_sig).item()
     elif args.data_loss_expr == 'scaled_sigmoid':
-        w_ = scaled_sigmoid(w.item(), args.scale_sig)
-    
+        w_ = scaled_sigmoid(w, args.scale_sig).item()
+    else:
+        w_ = torch.sigmoid(w).item()
 
 
     ##################################
@@ -243,6 +243,9 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
     sic_true , tpr_true , auc_true = SIC(label_test, true_likelihoods[str(sig_train)])
     sic_score , tpr_score , auc_score = SIC(label_test, score_likelihoods[str(sig_train)])
 
+    wandb.log({'AUC': auc_score, 'max SIC': np.max(sic_score)})
+
+
     figure = plt.figure()
 
     plt.plot(tpr_true, sic_true, label='true')
@@ -263,7 +266,7 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
 
     plt.plot(bins, Background, label='model B')
     plt.plot(bins, Signal, label='model S')
-    plt.plot(bins, Data, label='w * S + (1-w) * B with w=%.3f' % w_)
+    plt.plot(bins, Data, label='w * S + (1-w) * B with w=%.5f' % w_)
     plt.hist(X_train[y_train==0], bins=bins, label='back' , density=True, histtype='step')
     plt.hist(X_train[y_train==1], bins=bins, label='data', density=True, histtype='step')
     plt.legend(frameon=False)

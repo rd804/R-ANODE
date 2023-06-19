@@ -3,7 +3,7 @@
 all_sig=1
 arr=1	
 group="nflows_gaussian_mixture_1"
-job_type="m_anode_tailbound_15_b_w_freeze_"
+job_type="m_b_train_w_scan_mb_2048"
 
 source ~/.bashrc
 conda activate manode
@@ -18,7 +18,7 @@ do
     do
         echo "sigma = ${w_}"
         arr=()
-        for j in {0..3..1}
+        for j in {0..5..1}
         do
             if [[ ! -f /scratch/rd804/m-anode/results/${group}/${job_type}'_sig_1_w_'${w_}/try_${j}/valloss.npy ]]
             then

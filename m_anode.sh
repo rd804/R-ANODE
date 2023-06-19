@@ -7,8 +7,8 @@
 #SBATCH --ntasks=1                # Total # of tasks across all nodes
 #SBATCH --cpus-per-task=1         # Cores per task (>1 if multithread tasks)
 #SBATCH --gres=gpu:1              # Number of GPUs per node
-#SBATCH --mem=2000                # Real memory (RAM) required (MB)
-#SBATCH --time=08:00:00           # Total run time limit (HH:MM:SS)
+#SBATCH --mem=6000                # Real memory (RAM) required (MB)
+#SBATCH --time=10:00:00           # Total run time limit (HH:MM:SS)
 
 
 cd /scratch/rd804/m-anode/
@@ -23,8 +23,9 @@ sig=$4
 
 
 
-nohup python scripts/m_anode.py --sig_train=${sig} --sig_test=10 \
-        --mode_background='freeze' --epochs=100 \
+nohup python scripts/m_anode_fixed_w.py --sig_train=${sig} --sig_test=10 \
+        --mini_batch=2048 --mode_background='freeze' --epochs=500 \
+        --w=0.01 --w_train \
         --wandb_group=${group_name} \
         --wandb_job_type=${job_type}'_'${sig} \
         --wandb_run_name='try_'${try_} \

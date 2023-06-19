@@ -6,7 +6,29 @@ from nflows import transforms, distributions, flows
 import torch
 import torch.nn.functional as F
 from nflows.distributions import uniform
+from torch import nn
 
+
+class Net(nn.Module):
+    def __init__(self, n_features, n_hidden, n_output, n_layers=1, activation=nn.ReLU()):
+        super(Net, self).__init__()
+        self.n_features = n_features
+        self.n_hidden = n_hidden
+        self.n_output = n_output
+        self.n_layers = n_layers
+        self.activation = activation
+
+        self.layers = nn.ModuleList([nn.Linear(n_features, n_hidden)])
+        for i in range(n_layers-1):
+            self.layers.append(nn.Linear(n_hidden, n_hidden))
+        self.layers.append(nn.Linear(n_hidden, n_output))
+
+    def forward(self, x):
+        for layer in self.layers[:-1]:
+            x = self.activation(layer(x))
+        x = self.layers[-1](x)
+        x = nn.Sigmoid()(x)
+        return x
 
 
 
@@ -152,6 +174,15 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
             data_loss += kld_w * ( p_s * (torch.log(p_s) - \
                                             torch.log(p_b)))
 
+        elif data_loss_expr == 'minimize_w':
+            data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
+            data_loss = torch.log(data_p + 1e-32)
+
+            data_loss += -w
+
+        elif data_loss_expr == 'w_model':
+            # model(w) instead of torch.sigmoid(w)
+            pass
 
         else:
             raise ValueError('data_loss must be either expectation_likelihood , true_likelihood, capped_sigmoid, scaled_sigmoid, with_w_scaled_KLD, with_w_weighted_KLD, with_self_weighted_KLD')

@@ -19,15 +19,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--sig_train',  default=10, help='signal train')
 parser.add_argument('--sig_test', default=10, help='signal test')
 parser.add_argument('--mode_background', type=str, default='train', help='train, freeze, pretrained')
+
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 parser.add_argument('--clip_grad', default=False, help='clip grad')
 parser.add_argument('--epochs', type=int, default=20, help='epochs')
+parser.add_argument('--mini_batch', type=int, default=128, help='mini batch size')
+parser.add_argument('--gpu', type=str, default='cuda:0', help='gpu to train on')
+parser.add_argument('--data_loss_expr', type=str, default='true_likelihood', help='loss for SR region')
+
+parser.add_argument('--w_train', action='store_true', help='train w if true, else fix w to initial value value')
 parser.add_argument('--true_w', action='store_true', help='use true w, as initial value for w')
 
-parser.add_argument('--data_loss_expr', type=str, default='true_likelihood', help='loss for SR region')
 parser.add_argument('--w', type=float, default=0.0, help='initial for SR region')
-parser.add_argument('--gpu', type=str, default='cuda:0', help='gpu to train on')
-parser.add_argument('--w_train', action='store_true', help='train w if true, else fix w to initial value value')
 parser.add_argument('--cap_sig', type=float, default=1.0, help='capping the maximum value of sigmoid function for w: (cap_sig)/(1+exp(-x))')
 parser.add_argument('--scale_sig', type=float, default=1.0, help='scaling the sigmoid function for w: 1/(1+exp(-scale_sig * w))')
 parser.add_argument('--kld_w', type=float, default=1.0)
@@ -45,7 +48,7 @@ wandb.init(project="m-anode", config=args,
               group=args.wandb_group, job_type=args.wandb_job_type)
 
 wandb.run.name = args.wandb_run_name
-
+wandb.config['tailbound'] = 15
 
 # print wandb group
 
@@ -95,7 +98,7 @@ x_test = data[str(args.sig_test)]['val']['data']
 label_test = data[args.sig_test]['val']['label']
 
 
-batch_size = 128
+batch_size = args.mini_batch
 
 X_train = torch.from_numpy(X_train.reshape(-1,1)).float()
 y_train = torch.from_numpy(y_train.reshape(-1,1)).float()
@@ -115,7 +118,8 @@ model_S=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout
 model_B=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0, device=device)
 
 if args.w_train:
-    w = torch.tensor(args.w, requires_grad=True, device=device)
+    w = torch.tensor(inverse_sigmoid(args.w), requires_grad=False, device=device)
+
 else:
     if args.true_w:
         w = torch.tensor(inverse_sigmoid(true_w[str(sig_train)][0]), requires_grad=False, device=device)
@@ -144,7 +148,11 @@ elif args.mode_background == 'pretrained':
 
     model_B.load_state_dict(torch.load(f'results/nflows_gaussian_mixture_1/CR/try_0/model_CR_{index}.pt'))
 
-    optimizer = torch.optim.Adam(list(model_S.parameters()) + list(model_B.parameters()) + [w], lr=args.lr)
+
+    if args.w_train:
+        optimizer = torch.optim.Adam(list(model_S.parameters()) + list(model_B.parameters()) + [w], lr=args.lr)
+    else:
+        optimizer = torch.optim.Adam(list(model_S.parameters()) + list(model_B.parameters()), lr=args.lr)
 
 
 
@@ -167,8 +175,12 @@ for epoch in range(args.epochs):
                        mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr,
                        w_train=args.w_train, cap_sig=args.cap_sig, scale_sig=args.scale_sig, kld_w=args.kld_w)
 
-
-    w_ = torch.sigmoid(w).item()
+    if args.data_loss_expr == 'capped_sigmoid':
+        w_ = capped_sigmoid(w, args.cap_sig).item()
+    elif args.data_loss_expr == 'scaled_sigmoid':
+        w_ = scaled_sigmoid(w, args.scale_sig).item()
+    else:
+        w_ = torch.sigmoid(w).item()
 
 
     ##################################
@@ -266,7 +278,7 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
 
     plt.plot(bins, Background, label='model B')
     plt.plot(bins, Signal, label='model S')
-    plt.plot(bins, Data, label='w * S + (1-w) * B with w=%.3f' % w_)
+    plt.plot(bins, Data, label='w * S + (1-w) * B with w=%.5f' % w_)
     plt.hist(X_train[y_train==0], bins=bins, label='back' , density=True, histtype='step')
     plt.hist(X_train[y_train==1], bins=bins, label='data', density=True, histtype='step')
     plt.legend(frameon=False)

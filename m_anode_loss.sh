@@ -27,7 +27,7 @@ sig=1
 
 if [[ ${loss_type} == "capped_sigmoid" ]]
 then
-        nohup python scripts/m_anode.py --sig_train=${sig} --sig_test=10 --w=-4 \
+        nohup python scripts/m_anode.py --sig_train=${sig} --sig_test=10 --w=1.0 \
                 --mode_background='freeze' --epochs=100 \
                 --wandb_group=${group_name} \
                 --wandb_job_type=${job_type}'_sig_'${sig}'_loss_'${loss_type}'_param_'${param} \

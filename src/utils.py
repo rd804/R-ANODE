@@ -281,9 +281,11 @@ def inverse_sigmoid(x):
     return np.log(x/(1-x))
 
 def capped_sigmoid(x, a):
+    x = torch.tensor(x)
     return a/(1+torch.exp(-x))
 
 def scaled_sigmoid(x, a):
+    x = torch.tensor(x)
     return 1/(1+torch.exp(- a * x))
 
 
