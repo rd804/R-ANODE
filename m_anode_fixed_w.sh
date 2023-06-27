@@ -25,7 +25,7 @@ w_=$4
 sig=1
 
 nohup python scripts/m_anode_fixed_w.py --sig_train=${sig} --sig_test=10 \
-        --mini_batch=2048 --mode_background='pretrained' --epochs=500 --w=${w_}\
+        --mini_batch=2048 --mode_background='freeze' --epochs=500 --w=${w_}\
         --wandb_group=${group_name} \
         --wandb_job_type=${job_type}'_sig_'${sig}'_w_'${w_} \
         --wandb_run_name='try_'${try_} \
