@@ -2,7 +2,7 @@
 
 arr=1	
 group="nflows_gaussian_mixture_1"
-job_type="CR_5_hidden"
+job_type="CR_tailbound_20"
 
 source ~/.bashrc
 conda activate manode

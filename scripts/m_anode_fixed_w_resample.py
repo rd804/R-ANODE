@@ -31,7 +31,7 @@ parser.add_argument('--w_train', action='store_true', help='train w if true, els
 parser.add_argument('--true_w', action='store_true', help='use true w, as initial value for w')
 parser.add_argument('--resample', action='store_true', help='if data is to resampled')
 
-parser.add_argument('--seed', type=int, default=10, help='seed')
+parser.add_argument('--seed', type=int, default=22, help='seed')
 
 
 parser.add_argument('--w', type=float, default=0.0, help='initial for SR region')
@@ -147,7 +147,11 @@ valloader = torch.utils.data.DataLoader(valdataset, batch_size=batch_size*5, shu
 testtensor = torch.from_numpy(x_test.reshape(-1,1)).float()
 
 model_S=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0, device=device)
-model_B=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0, device=device)
+if not args.mode_background == 'true':
+    model_B=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0, device=device,tailbound=10)
+else:
+    mode
+
 
 if args.w_train:
     w = torch.tensor(inverse_sigmoid(args.w), requires_grad=False, device=device)
@@ -172,13 +176,22 @@ elif args.mode_background == 'freeze':
         optimizer = torch.optim.Adam(list(model_S.parameters()) + [w], lr=args.lr)
     else:
         optimizer = torch.optim.Adam(list(model_S.parameters()), lr=args.lr)
+elif args.mode_background == 'true':
+
+    model_B = gaussian_prob(back_mean, back_sigma**2)
+    model_B.eval()
+
+    if args.w_train:
+        optimizer = torch.optim.Adam(list(model_S.parameters()) + [w], lr=args.lr)
+    else:
+        optimizer = torch.optim.Adam(list(model_S.parameters()), lr=args.lr)
 
 elif args.mode_background == 'pretrained':
-    valloss = np.load('results/nflows_gaussian_mixture_1/CR/try_0/valloss_list_background.npy')
+    valloss = np.load('results/nflows_gaussian_mixture_1/CR_tailbound_15/try_9/valloss.npy')
 
     index = np.argmin(valloss).flatten()[0]
 
-    model_B.load_state_dict(torch.load(f'results/nflows_gaussian_mixture_1/CR/try_0/model_CR_{index}.pt'))
+    model_B.load_state_dict(torch.load(f'results/nflows_gaussian_mixture_1/CR_tailbound_15/try_9/model_CR_{index}.pt'))
 
 
     if args.w_train:

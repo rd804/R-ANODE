@@ -3,7 +3,7 @@
 all_sig=1
 arr=1	
 group="nflows_gaussian_mixture_1"
-job_type="SR"
+job_type="SR_mb_2048_tb_15_resample"
 
 source ~/.bashrc
 conda activate manode

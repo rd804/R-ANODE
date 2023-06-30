@@ -1,11 +1,9 @@
-# %%
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
 from src.nflow_utils import *
 import os
 
-# %%
 from nflows import transforms, distributions, flows
 import torch
 import torch.nn.functional as F
@@ -15,17 +13,20 @@ from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 import argparse
 import wandb
-
-# %%
 import pickle
 
-# %%
 #os.environ["CUDA_VISIBLE_DEVICES"]='2'
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--sig_train', default=10)
 parser.add_argument('--try_', type=int, default=0)
 parser.add_argument('--epochs', type=int, default=2)
+parser.add_argument('--batch_size', type=int, default=256)
+
+parser.add_argument('--resample', action='store_true', help='if data is to resampled')
+parser.add_argument('--seed', type=int, default=22, help='seed')
+
+
 parser.add_argument('--wandb_group', type=str, default='test')
 parser.add_argument('--wandb_job_type', type=str, default='SR')
 parser.add_argument('--wandb_run_name', type=str, default='try_')
@@ -52,9 +53,6 @@ kwargs = {'num_workers': 4, 'pin_memory': True} if CUDA else {}
 kwargs = {}
 
 print(device)
-# %%
-
-# %%
 with open('data/data.pkl', 'rb') as f:
      data = pickle.load(f)
 
@@ -65,14 +63,41 @@ with open('data/background.pkl', 'rb') as f:
 
 
 sig_train = args.sig_train
+back_mean = 0
+sig_mean = 3
+sig_simga = 0.5
+back_sigma = 3
+
 
 # best_parameters[str(sig_train)] = {}
-x_train = data[str(sig_train)]['train']['data']
-x_train = shuffle(x_train, random_state=10)
+if not args.resample:
+    x_train = data[str(sig_train)]['train']['data']
+    x_train = shuffle(x_train, random_state=10)
 
-x_train , x_val = train_test_split(x_train, test_size=0.5, random_state=22)
-x_test = data[str(sig_train)]['val']['data']
-labels_test = data[str(sig_train)]['val']['label']
+else:
+
+    sig_train = args.sig_train
+
+    n_back = 200000
+    n_sig = int(np.sqrt(n_back) * float(sig_train))
+
+    # set seed
+    np.random.seed(args.seed)
+    x_back = np.random.normal(back_mean, back_sigma, n_back)
+    np.random.seed(args.seed)
+    x_sig = np.random.normal(sig_mean, sig_simga, n_sig)
+
+    x_train = np.concatenate((x_back, x_sig), axis=0)
+    x_train = shuffle(x_train, random_state=args.seed)
+
+    print('resampled data with seed %d' % args.seed)
+    print('amount of background: %d' % n_back)
+    print('amount of signal: %d' % n_sig)
+
+x_train , x_val = train_test_split(x_train, test_size=0.5, random_state=args.seed)
+
+x_test = data['10']['val']['data']
+labels_test = data['10']['val']['label']
 
 
 traintensor = torch.from_numpy(x_train.astype('float32').reshape((-1,1)))
@@ -81,7 +106,7 @@ testtensor = torch.from_numpy(x_test.astype('float32').reshape((-1,1)))
 
 
 # Use the standard pytorch DataLoader
-batch_size = 256
+batch_size = args.batch_size
 trainloader = torch.utils.data.DataLoader(traintensor, batch_size=batch_size, shuffle=True)
 
 test_batch_size=batch_size*5
@@ -90,7 +115,8 @@ testloader = torch.utils.data.DataLoader(testtensor, batch_size=test_batch_size,
 
 
 # define noramlizing flow model
-model=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0,device=device)
+model=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0,device=device,
+                   tailbound=15)
 
 # # %%
 # define savepath

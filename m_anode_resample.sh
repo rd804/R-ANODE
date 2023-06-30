@@ -23,8 +23,8 @@ sig=$4
 
 
 
-nohup python scripts/m_anode_fixed_w_resample.py --sig_train=${sig} --sig_test=10 \
-        --mini_batch=1024 --mode_background='freeze' --epochs=500 \
+python scripts/m_anode_fixed_w_resample.py --sig_train=${sig} --sig_test=10 \
+        --mini_batch=2048 --mode_background='freeze' --epochs=500 \
         --true_w --resample --seed=${try_} \
         --wandb_group=${group_name} \
         --wandb_job_type=${job_type}'_'${sig} \

@@ -30,9 +30,20 @@ class Net(nn.Module):
         x = nn.Sigmoid()(x)
         return x
 
+class gaussian_prob(nn.Module):
+    def __init__(self, mean, sigma):
+        super(gaussian_prob, self).__init__()
+        self.mean = mean
+        self.sigma = np.sqrt(sigma)
+    
+    def log_prob(self, x):
+        p = torch.exp(-0.5 * ((x - self.mean) / self.sigma)**2) / (self.sigma * np.sqrt(2 * np.pi))
+        return torch.log(p + 1e-32)
 
 
-def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,dropout=0.05,nembedding=20,nfeatures=2,
+
+
+def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,dropout=0.05,nembedding=20,nfeatures=2,tailbound=15,
                  device='cpu'):
 
     init_id=True    
@@ -45,7 +56,7 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,drop
                        'random_mask':False,
                        'num_bins':nbins,
                        'tails':'linear',
-                       'tail_bound':15,
+                       'tail_bound':tailbound,
                        'min_bin_width': 1e-6,
                        'min_bin_height': 1e-6,
                        'min_derivative': 1e-6}
@@ -190,9 +201,10 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
         #############################################
         ##############################################
         
+        background_loss = model_B.log_prob(data[label==0])
         
-        background_loss = -model_B.log_prob(data[label==0])
-        loss = -data_loss.sum() + background_loss.sum() 
+        
+        loss = -data_loss.sum() - background_loss.sum() 
 
         if np.isnan(loss.item()):
             break

@@ -95,9 +95,10 @@ test_loader = torch.utils.data.DataLoader(test_tensor, batch_size=batch_size*6, 
 
 
 # define normalizing flow model
-model_background=define_model(nfeatures=1,nhidden=2,hidden_size=5,
-                              embedding=None,dropout=0,nembedding=0
-                              ,device=device)
+model_background=define_model(nfeatures=1,nhidden=2,hidden_size=20,
+                              embedding=None,dropout=0,nembedding=0, 
+                              device=device,tailbound=20)
+
 
 
 valloss_list_background=[]
@@ -125,8 +126,8 @@ for epoch in range(args.epochs):
 valloss_list_background=np.array(valloss_list_background)
 trainloss_list_background=np.array(trainloss_list_background)
 
-np.save(save_path+'trainloss_list_background.npy', trainloss_list_background)
-np.save(save_path+'valloss_list_background.npy', valloss_list_background)
+np.save(save_path+'trainloss.npy', trainloss_list_background)
+np.save(save_path+'valloss.npy', valloss_list_background)
 
 # load best model
 min_epoch=np.argmin(valloss_list_background)

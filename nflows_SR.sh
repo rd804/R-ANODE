@@ -21,7 +21,8 @@ group_name=$2
 job_type=$3
 sig=$4
 
-python scripts/nflows_SR.py --try ${try_} --epochs 200 \
+python scripts/nflows_SR.py --try ${try_} --epochs=500 --batch_size=1024 \
+    --resample --seed ${try_} \
     --wandb_group ${group_name} --wandb_job_type ${job_type} \
     --sig_train ${sig}
 
