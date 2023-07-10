@@ -17,6 +17,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--scan_set', nargs='+', type=str, default='10')
+parser.add_argument('--mode_background', type=str, default='false')
 # pass a list in argparse
 
 # note ANODE results come with tailbound=10
@@ -72,31 +73,35 @@ test_tensor = torch.from_numpy(x_test.astype('float32').reshape((-1,1))).to(devi
 
 
 # get CR region for ANODE
+if args.mode_background != 'true':
+    model = define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0,device=device,
+                        tailbound=10)
 
-model = define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0,device=device,
-                     tailbound=10)
+    CR_array = []
+    for try_ in range(10):
+        CR_file = f'results/nflows_gaussian_mixture_1/CR/try_{try_}'
+        best_model_file = f'{CR_file}/model_CR_best.pt'
 
-CR_array = []
-for try_ in range(10):
-    CR_file = f'results/nflows_gaussian_mixture_1/CR/try_{try_}'
-    best_model_file = f'{CR_file}/model_CR_best.pt'
+        model.load_state_dict(torch.load(best_model_file))
+        model.eval()
+        model.to(device)
 
-    model.load_state_dict(torch.load(best_model_file))
-    model.eval()
-    model.to(device)
+        with torch.no_grad():
+            CR = model.log_prob(test_tensor).cpu().detach().numpy()
 
-    with torch.no_grad():
-        CR = model.log_prob(test_tensor).cpu().detach().numpy()
+        CR_p = np.exp(CR)
+        CR_array.append(CR_p)
 
-    CR_p = np.exp(CR)
-    CR_array.append(CR_p)
+    CR_array = np.array(CR_array)
+    mean_CR = np.mean(CR_array,axis=0)
+    # replace 0 with a small number
+    mean_CR[mean_CR==0] = 1e-10
 
-CR_array = np.array(CR_array)
-mean_CR = np.mean(CR_array,axis=0)
-# replace 0 with a small number
-mean_CR[mean_CR==0] = 1e-10
+    mean_log_CR = np.log(mean_CR)
+else:
+    model_B = gaussian_prob(back_mean,back_sigma**2)
 
-mean_log_CR = np.log(mean_CR)
+    mean_log_CR = model_B.log_prob(torch.from_numpy(x_test)).numpy().flatten()
 
 
 sig_train_list = [0.1, 0.2, 0.5, 0.8, 0.9, 1, 1.5, 2, 5 , 10]

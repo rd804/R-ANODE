@@ -16,8 +16,8 @@ cd /scratch/rd804/m-anode/
 source ~/.bashrc
 conda activate manode
 
-python scripts/m_anode_compile.py --scan_set='m_bw_fixed_resample_mb_2048_3'
-
+python scripts/m_anode_compile.py --scan_set='m_bw_true_resample' \
+    --mode_background='true' \
 
         
 

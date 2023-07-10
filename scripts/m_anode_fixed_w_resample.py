@@ -52,7 +52,7 @@ wandb.init(project="m-anode", config=args,
               group=args.wandb_group, job_type=args.wandb_job_type)
 
 wandb.run.name = args.wandb_run_name
-wandb.config['tailbound'] = 15
+wandb.config['tailbound'] = 20
 
 # print wandb group
 
@@ -115,7 +115,11 @@ else:
 _X_train = np.concatenate((x_train, background), axis=0)
 _y_train = np.concatenate((np.ones(len(x_train)), np.zeros(len(background))), axis=0)
 
+mean_train = np.mean(_X_train)
+sigma_train = np.std(_X_train)
 
+
+#_X_train = ( _X_train - mean_train)/sigma_train
 
 
 
@@ -146,11 +150,16 @@ valloader = torch.utils.data.DataLoader(valdataset, batch_size=batch_size*5, shu
 
 testtensor = torch.from_numpy(x_test.reshape(-1,1)).float()
 
-model_S=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0, device=device)
+model_S=define_model(nfeatures=1,nhidden=2,hidden_size=20,nbins=2,
+                     embedding=None,dropout=0,nembedding=0, 
+                     device=device,tailbound=15,base_dist='uniform',
+                     low = torch.amin(X_train).item(), high = torch.amax(X_train).item())
+print(model_S)
+
 if not args.mode_background == 'true':
-    model_B=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0, device=device,tailbound=10)
+    model_B=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0, device=device,tailbound=15)
 else:
-    mode
+    model_B = gaussian_prob(back_mean, back_sigma**2)
 
 
 if args.w_train:
@@ -178,7 +187,6 @@ elif args.mode_background == 'freeze':
         optimizer = torch.optim.Adam(list(model_S.parameters()), lr=args.lr)
 elif args.mode_background == 'true':
 
-    model_B = gaussian_prob(back_mean, back_sigma**2)
     model_B.eval()
 
     if args.w_train:
@@ -287,9 +295,11 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
     model_B.eval()
     with torch.no_grad():
         log_S = model_S.log_prob(testtensor.to(device)).cpu().detach().numpy()
-        log_B = model_B.log_prob(testtensor.to(device)).cpu().detach().numpy()
+        log_B = model_B.log_prob(torch.from_numpy(x_test).float()).numpy()
+        print(log_S.shape)
+        print(log_B.shape)
 
-        data  = w_ * np.exp(log_S) + (1-w_) * np.exp(log_B)
+        data  = w_ * np.exp(log_S).flatten() + (1-w_) * np.exp(log_B).flatten()
         back = np.exp(log_B)
 
         likelihood_ = data/back
@@ -319,7 +329,7 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
     Background = model_B.log_prob(torch.from_numpy(bins.reshape(-1,1)).float().to(device)).exp().detach().cpu().numpy()
     Signal = model_S.log_prob(torch.from_numpy(bins.reshape(-1,1)).float().to(device)).exp().detach().cpu().numpy()
 
-    Data = w_ * Signal + (1-w_) * Background
+    Data = w_ * Signal.flatten() + (1-w_) * Background.flatten()
 
     plt.plot(bins, Background, label='model B')
     plt.plot(bins, Signal, label='model S')

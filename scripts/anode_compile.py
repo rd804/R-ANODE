@@ -18,6 +18,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--scan_set_CR', nargs='+', type=str, default='10')
 parser.add_argument('--scan_set_SR', nargs='+', type=str, default='10')
+parser.add_argument('--mode_background', type=str, default='false')
 # pass a list in argparse
 
 # note ANODE results come with tailbound=10

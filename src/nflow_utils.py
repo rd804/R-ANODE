@@ -6,7 +6,12 @@ from nflows import transforms, distributions, flows
 import torch
 import torch.nn.functional as F
 from nflows.distributions import uniform
+from nflows.distributions.base import Distribution
+from nflows.utils import torchutils
 from torch import nn
+#from torch import distributions
+
+
 
 
 class Net(nn.Module):
@@ -43,10 +48,12 @@ class gaussian_prob(nn.Module):
 
 
 
-def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,dropout=0.05,nembedding=20,nfeatures=2,tailbound=15,
-                 device='cpu'):
 
-    init_id=True    
+
+def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,
+                 dropout=0.05,nembedding=20,nfeatures=2,tailbound=15,
+                 device='cpu', base_dist='normal', init_id=True,
+                 low = 0.0, high = 1.0):
     
     flow_params_RQS = {'num_blocks':nhidden, # num of hidden layers per block
                        'use_residual_blocks':False,
@@ -81,8 +88,12 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,drop
 
     del flow_blocks[-1]
     flow_transform = transforms.CompositeTransform(flow_blocks)
+    if base_dist == 'normal':
+        flow_base_distribution = distributions.StandardNormal(shape=[nfeatures])
+    elif base_dist == 'normal with mean and scale':
+        # distribution with mean and scale
+        flow_base_distribution = distributions.
 
-    flow_base_distribution = distributions.StandardNormal(shape=[nfeatures])
     flow = flows.Flow(transform=flow_transform, distribution=flow_base_distribution)
 
     model = flow.to(device)
@@ -120,6 +131,7 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
         data = data.to(device)
         label = label.to(device)
         label  = label.reshape(-1,)
+
         if mode == 'train':
             optimizer.zero_grad()
 
@@ -136,7 +148,7 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
             data_loss = torch.sigmoid(w) * model_S.log_prob(data[label==1]) + (1-torch.sigmoid(w)) * model_B.log_prob(data[label==1])
         
         elif data_loss_expr == 'true_likelihood':
-            data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
+            data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])).flatten() + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1])).flatten()
             data_loss = torch.log(data_p + 1e-32)
 
         elif data_loss_expr == 'capped_sigmoid':
@@ -202,7 +214,7 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
         ##############################################
         
         background_loss = model_B.log_prob(data[label==0])
-        
+       # print('background_loss_shape: ', background_loss.shape)
         
         loss = -data_loss.sum() - background_loss.sum() 
 
