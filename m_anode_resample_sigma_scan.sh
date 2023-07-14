@@ -3,7 +3,8 @@
 all_sig=1
 arr=1	
 group="nflows_gaussian_mixture_1"
-job_type="m_bw_true_resample_4"
+#group="test"
+job_type="m_2d_bw_true_256_8"
 
 source ~/.bashrc
 conda activate manode
@@ -13,6 +14,7 @@ while ((${#all_sig[@]}))
 do
     all_sig=()
 
+    #for sig in 10
     for sig in 0.1 0.2 0.5 0.8 0.9 1 1.5 2 5 10
     #for sig in 5
     #for sig in 0.1 0.2 0.8 0.9 5

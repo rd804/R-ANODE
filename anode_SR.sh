@@ -3,7 +3,8 @@
 all_sig=1
 arr=1	
 group="nflows_gaussian_mixture_1"
-job_type="SR_mb_2048_tb_15_resample"
+#group='test'
+job_type="SR_2d_2048"
 
 source ~/.bashrc
 conda activate manode
@@ -14,6 +15,7 @@ do
     all_sig=()
 
     for sig in 5 0.1 0.2 0.5 0.8 0.9 1 2 1.5 10
+    #for sig in 10
     do
         echo "sigma = ${sig}"
         arr=()

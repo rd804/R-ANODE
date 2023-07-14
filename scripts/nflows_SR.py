@@ -25,7 +25,7 @@ parser.add_argument('--batch_size', type=int, default=256)
 
 parser.add_argument('--resample', action='store_true', help='if data is to resampled')
 parser.add_argument('--seed', type=int, default=22, help='seed')
-
+parser.add_argument('--gaussian_dim',  default=1, type=int,help='dimension of gaussian')
 
 parser.add_argument('--wandb_group', type=str, default='test')
 parser.add_argument('--wandb_job_type', type=str, default='SR')
@@ -38,7 +38,7 @@ args = parser.parse_args()
 CUDA = True
 device = torch.device("cuda:0" if CUDA else "cpu")
 
-job_name = args.wandb_job_type+'_'+str(args.sig_train)
+job_name = args.wandb_job_type
 
 # initialize wandb
 wandb.init(project="m-anode", config=args,
@@ -53,20 +53,42 @@ kwargs = {'num_workers': 4, 'pin_memory': True} if CUDA else {}
 kwargs = {}
 
 print(device)
-with open('data/data.pkl', 'rb') as f:
-     data = pickle.load(f)
+
+if args.gaussian_dim == 1:
+    with open('data/data.pkl', 'rb') as f:
+        data = pickle.load(f)
 
 
-with open('data/background.pkl', 'rb') as f:
-    background = pickle.load(f)
+    with open('data/background.pkl', 'rb') as f:
+        background = pickle.load(f)
 
 
 
-sig_train = args.sig_train
-back_mean = 0
-sig_mean = 3
-sig_simga = 0.5
-back_sigma = 3
+    sig_train = args.sig_train
+    back_mean = 0
+    sig_mean = 3
+    sig_sigma = 0.5
+    back_sigma = 3
+
+else:
+    with open(f'data/data_{args.gaussian_dim}d.pkl', 'rb') as f:
+        data = pickle.load(f)
+
+    with open(f'data/background_{args.gaussian_dim}d.pkl', 'rb') as f:
+        background = pickle.load(f)
+
+    with open(f'data/true_w_{args.gaussian_dim}d.pkl', 'rb') as f:
+        true_w = pickle.load(f)
+
+    sig_train = args.sig_train
+    back_mean = 0
+    sig_mean = 2
+    sig_sigma = 0.25
+    back_sigma = 3
+
+    print(true_w[str(sig_train)])
+
+
 
 
 # best_parameters[str(sig_train)] = {}
@@ -82,10 +104,16 @@ else:
     n_sig = int(np.sqrt(n_back) * float(sig_train))
 
     # set seed
-    np.random.seed(args.seed)
-    x_back = np.random.normal(back_mean, back_sigma, n_back)
-    np.random.seed(args.seed)
-    x_sig = np.random.normal(sig_mean, sig_simga, n_sig)
+    if args.gaussian_dim == 1:
+        np.random.seed(args.seed)
+        x_back = np.random.normal(back_mean, back_sigma, n_back)
+        np.random.seed(args.seed)
+        x_sig = np.random.normal(sig_mean, sig_sigma, n_sig)
+    else:
+        np.random.seed(args.seed)
+        x_back = np.random.normal(back_mean, back_sigma, (n_back, args.gaussian_dim))
+        np.random.seed(args.seed)
+        x_sig = np.random.normal(sig_mean, sig_sigma, (n_sig, args.gaussian_dim))
 
     x_train = np.concatenate((x_back, x_sig), axis=0)
     x_train = shuffle(x_train, random_state=args.seed)
@@ -97,12 +125,13 @@ else:
 x_train , x_val = train_test_split(x_train, test_size=0.5, random_state=args.seed)
 
 x_test = data['10']['val']['data']
-labels_test = data['10']['val']['label']
+label_test = data['10']['val']['label']
 
 
-traintensor = torch.from_numpy(x_train.astype('float32').reshape((-1,1)))
-valtensor = torch.from_numpy(x_val.astype('float32').reshape((-1,1)))
-testtensor = torch.from_numpy(x_test.astype('float32').reshape((-1,1)))
+
+traintensor = torch.from_numpy(x_train.astype('float32').reshape((-1,args.gaussian_dim)))
+valtensor = torch.from_numpy(x_val.astype('float32').reshape((-1,args.gaussian_dim)))
+testtensor = torch.from_numpy(x_test.astype('float32').reshape((-1,args.gaussian_dim)))
 
 
 # Use the standard pytorch DataLoader
@@ -114,9 +143,10 @@ valloader = torch.utils.data.DataLoader(valtensor, batch_size=test_batch_size, s
 testloader = torch.utils.data.DataLoader(testtensor, batch_size=test_batch_size, shuffle=False)
 
 
-# define noramlizing flow model
-model=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0,device=device,
-                   tailbound=15)
+model = flows_for_gaussian(gaussian_dim = args.gaussian_dim, num_transforms = 2, num_blocks = 3, 
+                       hidden_features = 32, device = device)
+
+
 
 # # %%
 # define savepath
@@ -130,7 +160,7 @@ if not os.path.exists(save_path):
 trainloss_list=[]
 valloss_list=[]
 
-optimizer = torch.optim.Adam(model.parameters(),lr=1e-4) #,lr=1e-4)#, lr=1e-4)
+optimizer = torch.optim.Adam(model.parameters()) #,lr=1e-4)#, lr=1e-4)
 ##############
 # train model
 for epoch in range(args.epochs):
@@ -164,27 +194,64 @@ torch.save(model.state_dict(), save_path+'model_SR_best.pt')
 # check density estimation
 model.eval()
 with torch.no_grad():
-     samples=model.sample(50000)
-samples=samples.cpu().detach().numpy().reshape((-1))
+    x_samples = model.sample(10000).cpu().detach().numpy()
 
-figure=plt.figure()
-_=plt.hist(samples,bins=50, density=True, histtype='step', label='nflow')
-_=plt.hist(x_val,bins=50, density=True, histtype='step', label='valdata')
-_=plt.hist(x_train,bins=50, density=True, histtype='step', label='traindata')
-plt.legend(loc='upper right')
-plt.savefig(save_path+'nflow_SR.png')
 
-wandb.log({'nflow_SR': wandb.Image(figure)})
-plt.close()
+if args.gaussian_dim == 2:
+    figure=plt.figure()
+    #if dims > 1:
+    plt.hist2d(x_samples[:,0],x_samples[:,1],bins=100, density=True, label='nflow for 2d')
+
+    wandb.log({f'nflow_SR': wandb.Image(figure)})
+    plt.close()
 
 # compute scores
 model.eval()
 with torch.no_grad():
     log_p = model.log_prob(testtensor.to(device)).cpu().detach().numpy()
-    p = np.exp(log_p)
+    data_p = np.exp(log_p)
+
+
+
+back_p = p_back(x_test,back_mean, back_sigma, dim=args.gaussian_dim)
+
+likelihood = data_p / back_p
+
+true_likelihoods = {}
+true_likelihoods[str(sig_train)] = {}
+
+
+w1 = true_w[str(sig_train)][0]
+w2 = true_w[str(sig_train)][1]
+
+
+
+true_likelihoods[str(sig_train)] = p_data(x_test,[sig_mean, back_mean],[sig_sigma,back_sigma],
+                [w1, w2], dim=args.gaussian_dim)/p_back(x_test,back_mean, back_sigma, dim=args.gaussian_dim)
+
+
+
+
+
+sic_true , tpr_true , auc_true = SIC(label_test, true_likelihoods[str(sig_train)])
+sic_score , tpr_score , auc_score = SIC(label_test, likelihood)
+
+figure = plt.figure()
+
+plt.plot(tpr_true, sic_true, label='true')
+plt.plot(tpr_score, sic_score, label='score')
+
+plt.legend(loc='lower right')
+wandb.log({'SIC': wandb.Image(figure)})
+plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/SIC.png')
+plt.show()
+
+wandb.log({'AUC': auc_score, 'max SIC': np.max(sic_score)})
 
 # save scores
-np.save(save_path+'best_val_loss_scores.npy', p)
+np.save(save_path+'best_val_loss_scores.npy', data_p)
+
+
 
 wandb.finish()
     

@@ -9,6 +9,7 @@ from nflows.distributions import uniform
 from nflows.distributions.base import Distribution
 from nflows.utils import torchutils
 from torch import nn
+import nflows
 #from torch import distributions
 
 
@@ -36,15 +37,54 @@ class Net(nn.Module):
         return x
 
 class gaussian_prob(nn.Module):
-    def __init__(self, mean, sigma):
+    def __init__(self, mean, sigma, dim=1):
         super(gaussian_prob, self).__init__()
-        self.mean = mean
-        self.sigma = np.sqrt(sigma)
+        self.dim = dim
+        if dim ==1:
+            self.mean = mean
+            self.sigma = sigma
+        else:
+            self.mean = torch.tensor([mean for _ in range(dim)])
+            self.sigma = torch.tensor([sigma for _ in range(dim)])
     
     def log_prob(self, x):
-        p = torch.exp(-0.5 * ((x - self.mean) / self.sigma)**2) / (self.sigma * np.sqrt(2 * np.pi))
+        if self.dim == 1:
+            p = torch.exp(-0.5 * ((x - self.mean) / self.sigma)**2) / (self.sigma * np.sqrt(2 * np.pi))
+        else:
+            p = 1
+            for i,(mean, sigma) in enumerate(zip(self.mean, self.sigma)):
+
+                p *= torch.exp(-0.5 * ((x[:,i] - mean) / sigma)**2) / (sigma * np.sqrt(2 * np.pi))
+
         return torch.log(p + 1e-32)
 
+
+
+
+def flows_for_gaussian(gaussian_dim = 2, num_transforms = 2, num_blocks = 3, 
+                       hidden_features = 32, device = 'cpu'):
+
+    base_dist = nflows.distributions.normal.StandardNormal(shape=[gaussian_dim])
+
+    list_transforms = []
+    for _ in range(num_transforms):
+        list_transforms.append(
+            nflows.transforms.permutations.RandomPermutation(2)
+        )
+        list_transforms.append(
+            nflows.transforms.autoregressive.MaskedAffineAutoregressiveTransform(
+                features=gaussian_dim, 
+                hidden_features=hidden_features,
+                num_blocks=num_blocks,
+                activation=torch.nn.functional.relu
+            )
+        )
+
+    transform = nflows.transforms.base.CompositeTransform(list_transforms)
+
+    flow = nflows.flows.base.Flow(transform, base_dist).to(device)
+
+    return flow
 
 
 
@@ -92,7 +132,7 @@ def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,
         flow_base_distribution = distributions.StandardNormal(shape=[nfeatures])
     elif base_dist == 'normal with mean and scale':
         # distribution with mean and scale
-        flow_base_distribution = distributions.
+        pass
 
     flow = flows.Flow(transform=flow_transform, distribution=flow_base_distribution)
 
@@ -148,7 +188,12 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
             data_loss = torch.sigmoid(w) * model_S.log_prob(data[label==1]) + (1-torch.sigmoid(w)) * model_B.log_prob(data[label==1])
         
         elif data_loss_expr == 'true_likelihood':
-            data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])).flatten() + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1])).flatten()
+          #  print(model_S.log_prob(data[label==1,:]).shape)
+           # print(model_B.log_prob(data[label==1,:]).shape)
+            
+            if batch_idx==0:
+                assert model_S.log_prob(data[label==1,:]).shape == model_B.log_prob(data[label==1,:]).shape
+            data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
             data_loss = torch.log(data_p + 1e-32)
 
         elif data_loss_expr == 'capped_sigmoid':

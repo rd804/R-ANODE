@@ -25,6 +25,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--try_', type=int, default=0)
 parser.add_argument('--sig_train', type=int, default=10)
+parser.add_argument('--gaussian_dim',  default=1)
 parser.add_argument('--wandb_group', type=str, default='test')
 parser.add_argument('--wandb_job_type', type=str, default='CR')
 parser.add_argument('--wandb_run_name', type=str, default='try_')
@@ -60,20 +61,32 @@ print(device)
 
 
 # load data
-with open('data/data.pkl', 'rb') as f:
-     data = pickle.load(f)
+if args.gaussian_dim == 1:
+    with open('data/data.pkl', 'rb') as f:
+        data = pickle.load(f)
 
-back_mean = 0
-sig_mean = 3
-sig_simga = 0.5
-back_sigma = 3
+    back_mean = 0
+    sig_mean = 3
+    sig_simga = 0.5
+    back_sigma = 3
 
-wandb.config.update({'back_mean': back_mean, 'sig_mean': sig_mean,
-                        'sig_sigma': sig_simga, 'back_sigma': back_sigma})
+    wandb.config.update({'back_mean': back_mean, 'sig_mean': sig_mean,
+                            'sig_sigma': sig_simga, 'back_sigma': back_sigma})
 
-# load background
-with open('data/background.pkl', 'rb') as f:
-    background = pickle.load(f)
+    # load background
+    with open('data/background.pkl', 'rb') as f:
+        background = pickle.load(f)
+
+else:
+    with open(f'data/data_2{args.gaussian_dim}.pkl') as f:
+        data = pickle.load(f)
+    
+    back_mean = 0
+    sig_mean = 2
+    sig_simga = 0.25
+    
+
+     
 
 sig_train = args.sig_train
 # load test set

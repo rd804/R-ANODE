@@ -21,9 +21,10 @@ group_name=$2
 job_type=$3
 sig=$4
 
-python scripts/nflows_SR.py --try ${try_} --epochs=500 --batch_size=1024 \
+python scripts/nflows_SR.py --try ${try_} --gaussian_dim=2 \
+    --epochs=1000 --batch_size=2048 \
     --resample --seed ${try_} \
-    --wandb_group ${group_name} --wandb_job_type ${job_type} \
+    --wandb_group ${group_name} --wandb_job_type ${job_type}_${sig} \
     --sig_train ${sig}
 
 

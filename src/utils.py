@@ -261,19 +261,28 @@ np.array(sigma_arr),np.array(w_arr), np.array(likelihood_arr)
     
 
 
-def p_data(data,mu,sigma,p):
+def p_data(data,mu,sigma,p,dim=1):
 
     """ 2 gaussian mixture model"""
+    p_c1 = 1.0
+    p_c2 = 1.0
 
-    p_c1 = norm.pdf(data, mu[0], np.sqrt(sigma[0])) * p[0]
-    p_c2 = norm.pdf(data, mu[1], np.sqrt(sigma[1])) * p[1]
 
-    return p_c1 + p_c2
+    for d in range(dim):
+        p_c1 *= norm.pdf(data[:,d], mu[0], sigma[0])
 
-def p_back(data,mu,sigma):
+    for d in range(dim):
+        p_c2 *= norm.pdf(data[:,d], mu[1], sigma[1])
+
+    return p[0]*(p_c1) + p[1]*(p_c2)
+
+def p_back(data,mu,sigma,dim=1):
 
     """ background gaussian """
-    pc = norm.pdf(data, mu, np.sqrt(sigma))
+    pc = 1.0
+
+    for d in range(dim):
+        pc *= norm.pdf(data[:,d], mu,sigma)
 
     return pc
 

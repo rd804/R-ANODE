@@ -24,7 +24,8 @@ sig=$4
 
 
 python scripts/m_anode_fixed_w_resample.py --sig_train=${sig} --sig_test=10 \
-        --mini_batch=2048 --mode_background='true' --epochs=500 \
+        --mini_batch=256 --mode_background='true' --epochs=500 \
+        --gaussian_dim=2 --ensemble \
         --true_w --resample --seed=${try_} \
         --wandb_group=${group_name} \
         --wandb_job_type=${job_type}'_'${sig} \

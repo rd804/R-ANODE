@@ -17,7 +17,10 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--scan_set', nargs='+', type=str, default='10')
+parser.add_argument('--anode_set', type=str, default='SR')
 parser.add_argument('--mode_background', type=str, default='false')
+parser.add_argument('--gaussian_dim',type=int,default=1)
+parser.add_argument('--ensemble', action='store_true')
 # pass a list in argparse
 
 # note ANODE results come with tailbound=10
@@ -38,30 +41,47 @@ import wandb
 
 group_name = 'nflows_gaussian_mixture_1'
 
-with open('data/data.pkl', 'rb') as f:
-     data = pickle.load(f)
+if args.gaussian_dim == 1:
+    with open('data/data.pkl', 'rb') as f:
+        data = pickle.load(f)
 
-with open('data/background.pkl', 'rb') as f:
-     background = pickle.load(f)
+    with open('data/background.pkl', 'rb') as f:
+        background = pickle.load(f)
 
-print(background.shape)
+    print(background.shape)
 
-with open('data/true_w.pkl', 'rb') as f:
-    true_w = pickle.load(f)
+    with open('data/true_w.pkl', 'rb') as f:
+        true_w = pickle.load(f)
 
+    back_mean = 0
+    sig_mean = 3
+    sig_sigma = 0.5
+    back_sigma = 3
 
+else:
+    with open(f'data/data_{args.gaussian_dim}d.pkl', 'rb') as f:
+        data = pickle.load(f)
 
-back_mean = 0
-sig_mean = 3
-sig_simga = 0.5
-back_sigma = 3
+    with open(f'data/background_{args.gaussian_dim}d.pkl', 'rb') as f:
+        background = pickle.load(f)
+
+    print(background.shape)
+
+    with open(f'data/true_w_{args.gaussian_dim}d.pkl', 'rb') as f:
+        true_w = pickle.load(f)
+
+    back_mean = 0
+    sig_mean = 2
+    sig_sigma = 0.25
+    back_sigma = 3
 
 
 wandb.init(project='m-anode',group=group_name, job_type=f'summary',
            config={'device':device, 'back_mean':back_mean,
-                   'sig_mean':sig_mean,'sig_simga':sig_simga, 
+                   'sig_mean':sig_mean,'sig_sigma':sig_sigma, 
                     'back_sigma':back_sigma, 'test_set':'10',
-                    'test_sigma':100})
+                    'test_sigma':100, 'mode_background':args.mode_background,
+                    'gaussian_dim':args.gaussian_dim})
 
 wandb.run.name = f'M_ANODE_{args.scan_set}'
 
@@ -69,7 +89,8 @@ wandb.run.name = f'M_ANODE_{args.scan_set}'
 
 x_test = data['10']['val']['data']
 label_test = data['10']['val']['label']
-test_tensor = torch.from_numpy(x_test.astype('float32').reshape((-1,1))).to(device)
+test_tensor = torch.from_numpy(x_test.astype('float32').reshape((-1,args.gaussian_dim))).to(device)
+
 
 
 # get CR region for ANODE
@@ -99,7 +120,7 @@ if args.mode_background != 'true':
 
     mean_log_CR = np.log(mean_CR)
 else:
-    model_B = gaussian_prob(back_mean,back_sigma**2)
+    model_B = gaussian_prob(back_mean,back_sigma, dim = args.gaussian_dim)
 
     mean_log_CR = model_B.log_prob(torch.from_numpy(x_test)).numpy().flatten()
 
@@ -138,7 +159,9 @@ for sig_train in sig_train_list:
 
     w1 = true_w[str(sig_train)][0]
     w2 = true_w[str(sig_train)][1]
-    true_likelihood = p_data(x_test,[sig_mean, back_mean],[sig_simga**2,back_sigma**2],[w1,w2])/p_back(x_test,back_mean,back_sigma**2)
+    true_likelihood = p_data(x_test,[sig_mean, back_mean],[sig_sigma,back_sigma],
+                [w1, w2], dim=args.gaussian_dim)/p_back(x_test,back_mean, back_sigma, dim=args.gaussian_dim)
+
     sic_true , tpr_true , auc_true = SIC(label_test, true_likelihood)
     sic_true_01 = SIC_fpr(label_test, true_likelihood, 0.1)
     sic_true_001 = SIC_fpr(label_test, true_likelihood, 0.01)
@@ -151,26 +174,40 @@ for sig_train in sig_train_list:
 
     for try_ in range(10):
 
-        model = define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0,device=device,
-                             tailbound=15)
+        model = flows_for_gaussian(gaussian_dim = args.gaussian_dim, num_transforms = 2, num_blocks = 3, 
+                       hidden_features = 32, device = device)
 
-        SR_file = f'results/nflows_gaussian_mixture_1/SR_mb_2048_tb_15_resample_{sig_train}/try_{try_}'
+        SR_file = f'results/nflows_gaussian_mixture_1/{args.anode_set}_{sig_train}/try_{try_}'
 
         if not os.path.exists(f'{SR_file}/valloss_list.npy'):
                 continue   
                  
         valloss = np.load(f'{SR_file}/valloss_list.npy')
-        best_epoch = np.argmin(valloss)
-        best_model_file = f'{SR_file}/model_SR_{best_epoch}.pt'      
+
+        if args.ensemble:
+            best_epochs = np.argsort(valloss)[0:10]
+
+
+            SR_ = []
+            for epoch in best_epochs:
+                best_model_file = f'{SR_file}/model_SR_{epoch}.pt'      
 
 
 
-        model.load_state_dict(torch.load(best_model_file))
-        model.eval()
-        model.to(device)
+                model.load_state_dict(torch.load(best_model_file))
+                model.eval()
+                model.to(device)
 
-        with torch.no_grad():
-            SR = model.log_prob(test_tensor).cpu().detach().numpy()
+                with torch.no_grad():
+                    SR = model.log_prob(test_tensor).cpu().detach().numpy()
+                    SR_.append(SR)
+            
+            SR_ = np.array(SR_)
+            SR = np.exp(SR_)
+            SR = np.mean(SR,axis=0)
+            SR = np.log(SR+1e-32)
+        else:
+            pass
 
 
         likelihood_score = (SR - mean_log_CR)
@@ -237,25 +274,36 @@ for scan in args.scan_set:
         for try_ in range(10):
 
         #  print(f'try: {try_}')
-            model = define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0,device=device)
+            model = flows_for_gaussian(gaussian_dim = args.gaussian_dim, num_transforms = 2, num_blocks = 3, 
+                       hidden_features = 32, device = device)            
+            
             SR_file = f'results/nflows_gaussian_mixture_1/{scan}_{sig_train}/try_{try_}'
+            #SR_file = f'results/nflows_gaussian_mixture_1/{scan}_{sig_train}/try_{try_}'
             #SR_file = f'results/nflows_gaussian_mixture_1/m_anode_true_likelihood_b_freeze_{sig_train}/try_{try_}'
 
             if not os.path.exists(f'{SR_file}/valloss.npy'):
                 continue
             
             valloss = np.load(f'{SR_file}/valloss.npy')
-            best_epoch = np.argmin(valloss)
-        # print
 
 
-            best_model_file = f'{SR_file}/model_S_{best_epoch}.pt'
-            model.load_state_dict(torch.load(best_model_file))
-            model.eval()
-            model.to(device)
+            if args.ensemble:
+                best_epoch = np.argsort(valloss)[0:10]
+                SR_ = []
+                for epoch in best_epoch:
+                    best_model_file = f'{SR_file}/model_S_{epoch}.pt'
+                    model.load_state_dict(torch.load(best_model_file))
+                    model.eval()
+                    model.to(device)
 
-            with torch.no_grad():
-                SR = model.log_prob(test_tensor).cpu().detach().numpy()
+                    with torch.no_grad():
+                        SR = model.log_prob(test_tensor).cpu().detach().numpy()
+                        SR_.append(SR)
+
+            SR_ = np.array(SR_)
+            SR = np.exp(SR_)
+            SR = np.mean(SR,axis=0)
+            SR = np.log(SR+1e-32)            
 
 
             likelihood_score = (SR - mean_log_CR)
