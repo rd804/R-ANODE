@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from nflows.distributions import uniform
 from sklearn.utils import shuffle
 # import train_test_split
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, ShuffleSplit
 import argparse
 import wandb
 import pickle
@@ -26,6 +26,11 @@ parser.add_argument('--batch_size', type=int, default=256)
 parser.add_argument('--resample', action='store_true', help='if data is to resampled')
 parser.add_argument('--seed', type=int, default=22, help='seed')
 parser.add_argument('--gaussian_dim',  default=1, type=int,help='dimension of gaussian')
+parser.add_argument('--shuffle_split', action='store_true', help='if shuffle split is used')
+parser.add_argument('--split', type=int, default=1, help='split number')
+
+
+
 
 parser.add_argument('--wandb_group', type=str, default='test')
 parser.add_argument('--wandb_job_type', type=str, default='SR')
@@ -44,7 +49,7 @@ job_name = args.wandb_job_type
 wandb.init(project="m-anode", config=args,
            group=args.wandb_group, job_type=job_name)
 
-name = args.wandb_run_name+str(args.try_)
+name = args.wandb_run_name
 wandb.run.name = name
 
 
@@ -86,12 +91,10 @@ else:
     sig_sigma = 0.25
     back_sigma = 3
 
-    print(true_w[str(sig_train)])
+#    print(true_w[str(sig_train)])
 
 
 
-
-# best_parameters[str(sig_train)] = {}
 if not args.resample:
     x_train = data[str(sig_train)]['train']['data']
     x_train = shuffle(x_train, random_state=10)
@@ -99,9 +102,13 @@ if not args.resample:
 else:
 
     sig_train = args.sig_train
+    true_w = {}
 
-    n_back = 200000
+    n_back = 200_000
     n_sig = int(np.sqrt(n_back) * float(sig_train))
+    weight = n_sig/(n_sig + n_back)
+    
+    true_w[str(sig_train)] = [weight, 1-weight]
 
     # set seed
     if args.gaussian_dim == 1:
@@ -116,23 +123,39 @@ else:
         x_sig = np.random.normal(sig_mean, sig_sigma, (n_sig, args.gaussian_dim))
 
     x_train = np.concatenate((x_back, x_sig), axis=0)
-    x_train = shuffle(x_train, random_state=args.seed)
+    x_train = shuffle(x_train,random_state=args.seed)
 
     print('resampled data with seed %d' % args.seed)
     print('amount of background: %d' % n_back)
     print('amount of signal: %d' % n_sig)
+    print(f'total amount of data: {len(x_train)}')
 
-x_train , x_val = train_test_split(x_train, test_size=0.5, random_state=args.seed)
+if not args.shuffle_split:    
+    data_train, data_val = train_test_split(x_train, test_size=0.1, random_state=args.seed)
+    background_train, background_val = train_test_split(background, test_size=0.1, random_state=args.seed)
+else:
+    ss_data = ShuffleSplit(n_splits=20, test_size=0.1, random_state=22)
+
+    print(f'doing a shuffle split with split number {args.split}')
+
+    for i, (train_index, test_index) in enumerate(ss_data.split(x_train)):
+        if i == args.split:
+            data_train, data_val = x_train[train_index], x_train[test_index]
+            break
+
+
 
 x_test = data['10']['val']['data']
 label_test = data['10']['val']['label']
 
 
 
-traintensor = torch.from_numpy(x_train.astype('float32').reshape((-1,args.gaussian_dim)))
-valtensor = torch.from_numpy(x_val.astype('float32').reshape((-1,args.gaussian_dim)))
+traintensor = torch.from_numpy(data_train.astype('float32').reshape((-1,args.gaussian_dim)))
+valtensor = torch.from_numpy(data_val.astype('float32').reshape((-1,args.gaussian_dim)))
 testtensor = torch.from_numpy(x_test.astype('float32').reshape((-1,args.gaussian_dim)))
 
+print('X_train shape', traintensor.shape)
+print('X_val shape', valtensor.shape)
 
 # Use the standard pytorch DataLoader
 batch_size = args.batch_size
@@ -164,8 +187,8 @@ optimizer = torch.optim.Adam(model.parameters()) #,lr=1e-4)#, lr=1e-4)
 ##############
 # train model
 for epoch in range(args.epochs):
-    trainloss= train(model,optimizer,trainloader,noise_data=0.,noise_context=0.0,device=device)
-    valloss=val(model,valloader,device=device)
+    trainloss= train(model,optimizer,trainloader,device=device)
+    valloss= val(model,valloader,device=device)
 
     torch.save(model.state_dict(), save_path+'model_SR_'+str(epoch)+'.pt')
 
@@ -187,6 +210,7 @@ valloss_list=np.array(valloss_list)
 min_epoch=np.argmin(valloss_list)
 print('min epoch SR: ',min_epoch)
 
+#min_epoch = args.epochs-1
 model.load_state_dict(torch.load(save_path+'model_SR_'+str(min_epoch)+'.pt'))
 torch.save(model.state_dict(), save_path+'model_SR_best.pt')
 

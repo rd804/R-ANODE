@@ -5,7 +5,6 @@
 #SBATCH --job-name=nflows_mixture  # Assign a short name to your job
 #SBATCH --nodes=1                 # Number of nodes you require
 #SBATCH --ntasks=1                # Total # of tasks across all nodes
-#SBATCH --array=1-7
 #SBATCH --cpus-per-task=1         # Cores per task (>1 if multithread tasks)
 #SBATCH --gres=gpu:1              # Number of GPUs per node
 #SBATCH --mem=3000                # Real memory (RAM) required (MB)
@@ -17,8 +16,8 @@ cd /scratch/rd804/m-anode/
 source ~/.bashrc
 conda activate manode
 
-python scripts/m_anode_compile.py --scan_set=m_2d_bw_true_256_$SLURM_ARRAY_TASK_ID \
-    --mode_background='true' --ensemble --anode_set='SR_2d' \
+python scripts/m_anode_compile.py --scan_set='m_2d_bw_true_shuffle_split_3' \
+    --mode_background='true' --ensemble --anode_set='SR_shuffle_split_3' \
     --gaussian_dim=2 \
 
         

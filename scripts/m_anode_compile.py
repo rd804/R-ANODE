@@ -15,11 +15,15 @@ import pickle
 import os
 import argparse
 
+np.seterr(divide='ignore', invalid='ignore')
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--scan_set', nargs='+', type=str, default='10')
 parser.add_argument('--anode_set', type=str, default='SR')
 parser.add_argument('--mode_background', type=str, default='false')
+
 parser.add_argument('--gaussian_dim',type=int,default=1)
+parser.add_argument('--shuffle_split_ensemble', action='store_true')
 parser.add_argument('--ensemble', action='store_true')
 # pass a list in argparse
 
@@ -27,6 +31,9 @@ parser.add_argument('--ensemble', action='store_true')
 
 
 args = parser.parse_args()
+
+tries = 6
+splits = 20
 
 
 #TODO: load best_models, get log probs, and then do logp - logq
@@ -39,7 +46,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 import wandb
 
-group_name = 'nflows_gaussian_mixture_1'
+group_name = 'nflows_gaussian_mixture_2'
 
 if args.gaussian_dim == 1:
     with open('data/data.pkl', 'rb') as f:
@@ -100,7 +107,7 @@ if args.mode_background != 'true':
 
     CR_array = []
     for try_ in range(10):
-        CR_file = f'results/nflows_gaussian_mixture_1/CR/try_{try_}'
+        CR_file = f'results/{group_name}/CR/try_{try_}'
         best_model_file = f'{CR_file}/model_CR_best.pt'
 
         model.load_state_dict(torch.load(best_model_file))
@@ -125,7 +132,8 @@ else:
     mean_log_CR = model_B.log_prob(torch.from_numpy(x_test)).numpy().flatten()
 
 
-sig_train_list = [0.1, 0.2, 0.5, 0.8, 0.9, 1, 1.5, 2, 5 , 10]
+#sig_train_list = [0.1, 0.3, 0.5, 0.8, 1, 1.5, 2, 5, 10]
+sig_train_list = [0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1, 1.5, 2, 5, 10]
 
 
 _true_max_SIC = []
@@ -155,10 +163,12 @@ for sig_train in sig_train_list:
     _SIC_001 = []
   #  print(f'sig_train: {sig_train}')
 
-
-
-    w1 = true_w[str(sig_train)][0]
-    w2 = true_w[str(sig_train)][1]
+    n_back = 200_000
+    n_sig = int(np.sqrt(n_back)*sig_train)
+    w1 = n_sig/(n_sig+n_back)
+    w2 = 1-w1
+    #w1 = true_w[str(sig_train)][0]
+    #w2 = true_w[str(sig_train)][1]
     true_likelihood = p_data(x_test,[sig_mean, back_mean],[sig_sigma,back_sigma],
                 [w1, w2], dim=args.gaussian_dim)/p_back(x_test,back_mean, back_sigma, dim=args.gaussian_dim)
 
@@ -172,43 +182,53 @@ for sig_train in sig_train_list:
     _true_SIC_001.append(sic_true_001)
 
 
-    for try_ in range(10):
+    for try_ in range(tries):
 
-        model = flows_for_gaussian(gaussian_dim = args.gaussian_dim, num_transforms = 2, num_blocks = 3, 
+
+
+        SR_array = []
+
+        for split in range(splits):
+            model = flows_for_gaussian(gaussian_dim = args.gaussian_dim, num_transforms = 2, num_blocks = 3, 
                        hidden_features = 32, device = device)
+            SR_file = f'results/{group_name}/{args.anode_set}_{sig_train}/try_{try_}_{split}'
 
-        SR_file = f'results/nflows_gaussian_mixture_1/{args.anode_set}_{sig_train}/try_{try_}'
+            if not os.path.exists(f'{SR_file}/valloss_list.npy'):
+                    continue   
+                    
+            valloss = np.load(f'{SR_file}/valloss_list.npy')
 
-        if not os.path.exists(f'{SR_file}/valloss_list.npy'):
-                continue   
-                 
-        valloss = np.load(f'{SR_file}/valloss_list.npy')
-
-        if args.ensemble:
-            best_epochs = np.argsort(valloss)[0:10]
-
-
-            SR_ = []
-            for epoch in best_epochs:
-                best_model_file = f'{SR_file}/model_SR_{epoch}.pt'      
+            if args.ensemble:
+                best_epochs = np.argsort(valloss)[0:10]
 
 
+                SR_ = []
+                for epoch in best_epochs:
+                    best_model_file = f'{SR_file}/model_SR_{epoch}.pt'      
 
-                model.load_state_dict(torch.load(best_model_file))
-                model.eval()
-                model.to(device)
 
-                with torch.no_grad():
-                    SR = model.log_prob(test_tensor).cpu().detach().numpy()
-                    SR_.append(SR)
-            
-            SR_ = np.array(SR_)
-            SR = np.exp(SR_)
-            SR = np.mean(SR,axis=0)
-            SR = np.log(SR+1e-32)
-        else:
-            pass
 
+                    model.load_state_dict(torch.load(best_model_file))
+                    model.eval()
+                    model.to(device)
+
+                    with torch.no_grad():
+                        SR = model.log_prob(test_tensor).cpu().detach().numpy()
+                        SR_.append(SR)
+                
+                SR_ = np.array(SR_)
+                SR = np.exp(SR_)
+                SR = np.mean(SR,axis=0)
+              #  SR = np.log(SR+1e-32)
+            else:
+                pass
+
+            SR_array.append(SR)
+
+        
+        SR_array = np.array(SR_array)
+        SR = np.mean(SR_array,axis=0)
+        SR = np.log(SR+1e-32)
 
         likelihood_score = (SR - mean_log_CR)
         sic , tpr , auc = SIC(label_test, likelihood_score)
@@ -271,38 +291,44 @@ for scan in args.scan_set:
 
 
 
-        for try_ in range(10):
+        for try_ in range(tries):
 
         #  print(f'try: {try_}')
-            model = flows_for_gaussian(gaussian_dim = args.gaussian_dim, num_transforms = 2, num_blocks = 3, 
-                       hidden_features = 32, device = device)            
+
+            SR_array = []
+
+            for split in range(splits):
+                model = flows_for_gaussian(gaussian_dim = args.gaussian_dim, num_transforms = 2, num_blocks = 2, 
+                        hidden_features = 8, device = device)            
+                
+                SR_file = f'results/{group_name}/{scan}_{sig_train}/try_{try_}_{split}'
             
-            SR_file = f'results/nflows_gaussian_mixture_1/{scan}_{sig_train}/try_{try_}'
-            #SR_file = f'results/nflows_gaussian_mixture_1/{scan}_{sig_train}/try_{try_}'
-            #SR_file = f'results/nflows_gaussian_mixture_1/m_anode_true_likelihood_b_freeze_{sig_train}/try_{try_}'
-
-            if not os.path.exists(f'{SR_file}/valloss.npy'):
-                continue
-            
-            valloss = np.load(f'{SR_file}/valloss.npy')
+                if not os.path.exists(f'{SR_file}/valloss.npy'):
+                    continue
+                
+                valloss = np.load(f'{SR_file}/valloss.npy')
 
 
-            if args.ensemble:
-                best_epoch = np.argsort(valloss)[0:10]
-                SR_ = []
-                for epoch in best_epoch:
-                    best_model_file = f'{SR_file}/model_S_{epoch}.pt'
-                    model.load_state_dict(torch.load(best_model_file))
-                    model.eval()
-                    model.to(device)
+                if args.ensemble:
+                    best_epoch = np.argsort(valloss)[0:10]
+                    SR_ = []
+                    for epoch in best_epoch:
+                        best_model_file = f'{SR_file}/model_S_{epoch}.pt'
+                        model.load_state_dict(torch.load(best_model_file))
+                        model.eval()
+                        model.to(device)
 
-                    with torch.no_grad():
-                        SR = model.log_prob(test_tensor).cpu().detach().numpy()
-                        SR_.append(SR)
+                        with torch.no_grad():
+                            SR = model.log_prob(test_tensor).cpu().detach().numpy()
+                            SR_.append(SR)
 
-            SR_ = np.array(SR_)
-            SR = np.exp(SR_)
-            SR = np.mean(SR,axis=0)
+                SR_ = np.array(SR_)
+                SR = np.exp(SR_)
+                SR = np.mean(SR,axis=0)
+                SR_array.append(SR)
+
+            SR_array = np.array(SR_array)
+            SR = np.mean(SR_array,axis=0)
             SR = np.log(SR+1e-32)            
 
 

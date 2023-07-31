@@ -16,7 +16,7 @@ import nflows
 
 
 class Net(nn.Module):
-    def __init__(self, n_features, n_hidden, n_output, n_layers=1, activation=nn.ReLU()):
+    def __init__(self, n_features, n_hidden, n_output, n_layers=2, activation=nn.ReLU()):
         super(Net, self).__init__()
         self.n_features = n_features
         self.n_hidden = n_hidden
@@ -248,9 +248,25 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
 
             data_loss += -w
 
-        elif data_loss_expr == 'w_model':
+        elif data_loss_expr == 'model_w':
+            if mode == 'train':
+                w.train()
+            else:
+                w.eval()
+            
+            log_B = model_B.log_prob(data[label==1])
+
+            _input = torch.cat([data[label==1], log_B.reshape(-1,1)], dim=1)
+           # print('input shape: ', _input.shape)
+
+            w_ = w(_input)
+            data_p = w_ * torch.exp(model_S.log_prob(data[label==1])) \
+                + (1-w_) * torch.exp(model_B.log_prob(data[label==1]))
+
+          #  print('w: ', w)
+            data_loss = torch.log(data_p + 1e-32)
             # model(w) instead of torch.sigmoid(w)
-            pass
+            
 
         else:
             raise ValueError('data_loss must be either expectation_likelihood , true_likelihood, capped_sigmoid, scaled_sigmoid, with_w_scaled_KLD, with_w_weighted_KLD, with_self_weighted_KLD')
@@ -279,6 +295,59 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
 
                 if mode_background == 'train' or mode_background == 'pretrained':
                     torch.nn.utils.clip_grad_norm_(model_B.parameters(), clip_grad)
+            loss.backward()
+            optimizer.step()
+
+
+ 
+
+    return total_loss, w_
+
+
+def m_anode_test(model_S,model_B,w,optimizer,data_loader, device='cpu', 
+                 mode='train', data_loss_expr = 'true_likelihood'):
+    
+
+    if mode == 'train':
+        model_S.train()
+        model_B.eval()
+
+    else:
+        model_S.eval()
+        model_B.eval()
+        w.requires_grad = False
+
+    total_loss = 0
+
+    for batch_idx, data_ in enumerate(data_loader):
+        data, label = data_
+        data = data.to(device)
+        label = label.to(device)
+        label  = label.reshape(-1,)
+
+        if mode == 'train':
+            optimizer.zero_grad()
+
+        if data_loss_expr == 'true_likelihood':
+            if batch_idx==0:
+                assert model_S.log_prob(data[label==1,:]).shape == model_B.log_prob(data[label==1,:]).shape
+                print(torch.sigmoid(w).item())
+
+            data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
+            data_loss = torch.log(data_p + 1e-32)
+
+        else:
+            raise ValueError('data_loss must be either expectation_likelihood , true_likelihood, capped_sigmoid, scaled_sigmoid, with_w_scaled_KLD, with_w_weighted_KLD, with_self_weighted_KLD')
+        
+        #############################################
+        ##############################################
+            
+        loss = -data_loss.sum()
+        total_loss += loss.item()
+
+
+
+        if mode == 'train':
             loss.backward()
             optimizer.step()
 

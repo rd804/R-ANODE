@@ -2,17 +2,20 @@
 
 all_sig=1
 arr=1	
-group="nflows_gaussian_mixture_1"
+#group="nflows_gaussian_mixture_1"
+group="test_"
 
 #declare -a loss=("")
-declare -a loss=("capped_sigmoid" "minimize_w")
+#declare -a loss=("capped_sigmoid" "minimize_w")
 #declare -a loss=("capped_sigmoid" "scaled_sigmoid" "with_w_scaled_KLD" "with_w_weighted_KLD" "with_self_weighted_KLD")
 #declare -a loss=("with_self_weighted_KLD")
-declare -a cap_sig=(0.02 0.01)
-declare -a scale_sig=(0.02 0.01)
-declare -a kld_w=(0.1 0.01)
+#declare -a cap_sig=(0.02 0.01)
+#declare -a scale_sig=(0.02 0.01)
+#declare -a kld_w=(0.1 0.01)
+declare -a loss=("model_w")
 
-job_type="m_loss_run_2"
+job_type="m_loss_5"
+
 
 source ~/.bashrc
 conda activate manode
@@ -43,7 +46,7 @@ do
 
             echo "loss = ${loss_} with param = ${param}"
             arr=()
-            for j in {0..3..1}
+            for j in {0..1..1}
             do
                 if [[ ! -f /scratch/rd804/m-anode/results/${group}/${job_type}'_sig_1_loss_'${loss_}'_param_'${param}/try_${j}/valloss.npy ]]
                 then

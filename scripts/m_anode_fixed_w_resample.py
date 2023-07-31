@@ -9,10 +9,11 @@ import torch
 import torch.nn.functional as F
 from nflows.distributions import uniform
 from sklearn.utils import shuffle
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, ShuffleSplit
 import argparse
 import pickle
 import wandb
+import sys
 
 
 parser = argparse.ArgumentParser()
@@ -29,11 +30,16 @@ parser.add_argument('--data_loss_expr', type=str, default='true_likelihood', hel
 
 parser.add_argument('--w_train', action='store_true', help='train w if true, else fix w to initial value value')
 parser.add_argument('--true_w', action='store_true', help='use true w, as initial value for w')
+
 parser.add_argument('--resample', action='store_true', help='if data is to resampled')
 parser.add_argument('--ensemble', action='store_true', help='if ensemble of models is used')
+parser.add_argument('--shuffle_split', action='store_true', help='if shuffle split is used')
+parser.add_argument('--split', type=int, default=1, help='split number')
 
 parser.add_argument('--seed', type=int, default=22, help='seed')
 parser.add_argument('--gaussian_dim', type=int, default=1)
+
+
 
 parser.add_argument('--w', type=float, default=0.0, help='initial for SR region')
 parser.add_argument('--cap_sig', type=float, default=1.0, help='capping the maximum value of sigmoid function for w: (cap_sig)/(1+exp(-x))')
@@ -47,7 +53,12 @@ parser.add_argument('--wandb_run_name', type=str, default='try_0')
 
 
 
+
 args = parser.parse_args()
+
+if os.path.exists(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/valloss.npy'):
+    print('already done')
+    sys.exit()
 
 wandb.init(project="m-anode", config=args,
               group=args.wandb_group, job_type=args.wandb_job_type)
@@ -85,8 +96,7 @@ elif args.gaussian_dim == 2:
     sig_sigma = 0.25
     back_sigma = 3
 
-    with open(f'data/true_w_{args.gaussian_dim}d.pkl', 'rb') as f:
-        true_w = pickle.load(f)
+
 
     with open(f'data/background_{args.gaussian_dim}d.pkl', 'rb') as f:
         background = pickle.load(f)
@@ -99,6 +109,9 @@ elif args.gaussian_dim == 2:
 
 if not args.resample:
 
+    with open(f'data/true_w_{args.gaussian_dim}d.pkl', 'rb') as f:
+        true_w = pickle.load(f)
+
     sig_train = args.sig_train
     x_train = data[str(sig_train)]['train']['data']
 
@@ -106,8 +119,13 @@ else:
     # set seed
     sig_train = args.sig_train
 
-    n_back = 200000
+    true_w = {}
+
+    n_back = 200_000
     n_sig = int(np.sqrt(n_back) * float(sig_train))
+    weight = n_sig/(n_sig + n_back)
+    
+    true_w[str(sig_train)] = [weight, 1-weight]
 
     # set seed
     if args.gaussian_dim ==1:
@@ -116,14 +134,14 @@ else:
         np.random.seed(args.seed)
         x_sig = np.random.normal(sig_mean, sig_sigma, n_sig)
     else:
-#        np.random.seed(args.seed)
+        np.random.seed(args.seed)
         x_back = np.random.normal(back_mean, back_sigma, (n_back, args.gaussian_dim))
-#        np.random.seed(args.seed)
+        np.random.seed(args.seed)
         x_sig = np.random.normal(sig_mean, sig_sigma, (n_sig, args.gaussian_dim))
 
     x_train = np.concatenate((x_back, x_sig), axis=0)
     #x_train = shuffle(x_train, random_state=args.seed)
-    x_train = shuffle(x_train)
+    x_train = shuffle(x_train,random_state=args.seed)
 
     print('resampled data with seed %d' % args.seed)
     print('amount of background: %d' % n_back)
@@ -135,18 +153,31 @@ else:
 
     # sample traindata
 
+if not args.shuffle_split:    
+    data_train, data_val = train_test_split(x_train, test_size=0.1, random_state=args.seed)
+    background_train, background_val = train_test_split(background, test_size=0.1, random_state=args.seed)
+else:
+    ss_data = ShuffleSplit(n_splits=20, test_size=0.1, random_state=22)
+    ss_background = ShuffleSplit(n_splits=20, test_size=0.1, random_state=40)
+
+    print(f'doing a shuffle split with split number {args.split}')
+
+    for i, (train_index, test_index) in enumerate(ss_data.split(x_train)):
+        if i == args.split:
+            data_train, data_val = x_train[train_index], x_train[test_index]
+            break
     
+    for i, (train_index, test_index) in enumerate(ss_background.split(background)):
+        if i == args.split:
+            background_train, background_val = background[train_index], background[test_index]
+            break
 
+_X_train = np.concatenate((data_train, background_train), axis=0)
+_y_train = np.concatenate((np.ones(len(data_train)), np.zeros(len(background_train))), axis=0)
 
-_X_train = np.concatenate((x_train, background), axis=0)
-_y_train = np.concatenate((np.ones(len(x_train)), np.zeros(len(background))), axis=0)
+_X_val = np.concatenate((data_val, background_val), axis=0)
+_y_val = np.concatenate((np.ones(len(data_val)), np.zeros(len(background_val))), axis=0)
 
-
-_X_train, _y_train  = shuffle(_X_train, _y_train)
-
-
-X_train , X_val = train_test_split(_X_train, test_size=0.2)
-y_train , y_val = train_test_split(_y_train, test_size=0.2)
 
 x_test = data[str(args.sig_test)]['val']['data']
 label_test = data[str(args.sig_test)]['val']['label']
@@ -154,11 +185,11 @@ label_test = data[str(args.sig_test)]['val']['label']
 
 batch_size = args.mini_batch
 
-X_train = torch.from_numpy(X_train.reshape(-1,args.gaussian_dim)).float()
-y_train = torch.from_numpy(y_train.reshape(-1,1))
+X_train = torch.from_numpy(_X_train.reshape(-1,args.gaussian_dim)).float()
+y_train = torch.from_numpy(_y_train.reshape(-1,1))
 
-X_val = torch.from_numpy(X_val.reshape(-1,args.gaussian_dim)).float()
-y_val = torch.from_numpy(y_val.reshape(-1,1))
+X_val = torch.from_numpy(_X_val.reshape(-1,args.gaussian_dim)).float()
+y_val = torch.from_numpy(_y_val.reshape(-1,1))
 
 print('X_train shape', X_train.shape)
 print('X_val shape', X_val.shape)
@@ -171,8 +202,8 @@ valloader = torch.utils.data.DataLoader(valdataset, batch_size=batch_size*5, shu
 
 testtensor = torch.from_numpy(x_test.reshape(-1,args.gaussian_dim)).float()
 
-model_S = flows_for_gaussian(gaussian_dim = args.gaussian_dim, num_transforms = 2, num_blocks = 3, 
-                       hidden_features = 32, device = device)
+model_S = flows_for_gaussian(gaussian_dim = args.gaussian_dim, num_transforms = 2, num_blocks = 2, 
+                       hidden_features = 8, device = device)
 
 if not args.mode_background == 'true':
     #model_B=define_model(nfeatures=1,nhidden=2,hidden_size=20,embedding=None,dropout=0,nembedding=0, device=device,tailbound=15)
@@ -228,6 +259,12 @@ elif args.mode_background == 'pretrained':
         optimizer = torch.optim.Adam(list(model_S.parameters()) + list(model_B.parameters()), lr=args.lr)
 
 
+if args.data_loss_expr == 'model_w':
+    w  = Net(n_features= args.gaussian_dim + 1,
+            n_hidden=8, n_output=1,
+             n_layers=2, activation=nn.ReLU()).to(device)
+    
+    optimizer = torch.optim.Adam(list(model_S.parameters()) + list(w.parameters()), lr=args.lr)
 
 
 
@@ -241,19 +278,24 @@ if not os.path.exists(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.
 
 for epoch in range(args.epochs):
 
-    train_loss = m_anode(model_S,model_B,w,optimizer,trainloader,noise_data=0,noise_context=0, device=device, mode='train',\
+    train_loss, w_ = m_anode(model_S,model_B,w,optimizer,trainloader,noise_data=0,noise_context=0, device=device, mode='train',\
                          mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr,
                          w_train=args.w_train, cap_sig=args.cap_sig, scale_sig=args.scale_sig, kld_w=args.kld_w)
-    val_loss = m_anode(model_S,model_B,w,optimizer,valloader,noise_data=0,noise_context=0, device=device, mode='val',\
+    val_loss, w_ = m_anode(model_S,model_B,w,optimizer,valloader,noise_data=0,noise_context=0, device=device, mode='val',\
                        mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr,
                        w_train=args.w_train, cap_sig=args.cap_sig, scale_sig=args.scale_sig, kld_w=args.kld_w)
 
-    if args.data_loss_expr == 'capped_sigmoid':
-        w_ = capped_sigmoid(w, args.cap_sig).item()
-    elif args.data_loss_expr == 'scaled_sigmoid':
-        w_ = scaled_sigmoid(w, args.scale_sig).item()
-    else:
-        w_ = torch.sigmoid(w).item()
+   # if args.data_loss_expr == 'capped_sigmoid':
+      #  w_ = capped_sigmoid(w, args.cap_sig).item()
+   # elif args.data_loss_expr == 'scaled_sigmoid':
+   #     w_ = scaled_sigmoid(w, args.scale_sig).item()
+   # else:
+    #    w_ = torch.sigmoid(w).item()
+    #print(w_)
+    print(w_)
+    w_ = torch.mean(w_).detach().cpu().numpy()
+
+    print(w_)
 
 
     ##################################
@@ -263,6 +305,7 @@ for epoch in range(args.epochs):
     torch.save(model_S.state_dict(), f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/model_S_{epoch}.pt')
     np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/w_{epoch}.npy', w_)
 
+    
     if args.mode_background == 'train' or args.mode_background == 'pretrained':
         torch.save(model_B.state_dict(), f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/model_B_{epoch}.pt')
 
@@ -280,35 +323,35 @@ for epoch in range(args.epochs):
 
 
 if ~np.isnan(train_loss) or ~np.isnan(val_loss):
+
     np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/valloss.npy', valloss)
     np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/trainloss.npy', trainloss)
 
     # Load best model
     if not args.ensemble:
         index = np.argmin(valloss).flatten()[0]
+
         model_S.load_state_dict(torch.load(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/model_S_{index}.pt'))
+        
         model_S.eval()
         log_S = model_S.log_prob(testtensor.to(device)).cpu().detach().numpy()
-        S = np.exp(log_S)
+        #S = np.exp(log_S)
+
 
     else:
         log_S = []
         sorted_index = np.argsort(valloss).flatten()[0:10]
         for index in sorted_index:
-            
+
             model_S.load_state_dict(torch.load(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/model_S_{index}.pt'))
+            
             model_S.eval()
             log_S.append(model_S.log_prob(testtensor.to(device)).cpu().detach().numpy())
 
         log_S = np.array(log_S)
         S = np.exp(log_S)
         S = np.mean(S, axis=0)
-
-
-
-
-
-
+        log_S = np.log(S + 1e-32)
 
 
     w_ = np.load(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/w_{index}.npy')
@@ -337,13 +380,13 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
     with torch.no_grad():
         log_B = model_B.log_prob(torch.from_numpy(x_test).float()).numpy()
 
-        assert S.shape == log_B.shape
+        assert log_S.shape == log_B.shape
 
 
-        data  = w_ * S.flatten() + (1-w_) * np.exp(log_B).flatten()
-        back = np.exp(log_B)
+        #data  = w_ * S.flatten() + (1-w_) * np.exp(log_B).flatten()
+        #back = np.exp(log_B)
 
-        likelihood_ = data/back
+        likelihood_ = log_S - log_B
 
         likelihood_ = np.nan_to_num(likelihood_, nan=0, posinf=0, neginf=0)
 
@@ -381,22 +424,9 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
         wandb.log({f'nflow_SR': wandb.Image(figure)})
         plt.close()
 
-   # figure = plt.figure()
-    #bins = np.linspace(min(X_train), max(X_train), 100).flatten()
-    #Background = model_B.log_prob(torch.from_numpy(bins.reshape(-1,1)).float().to(device)).exp().detach().cpu().numpy()
-    #Signal = model_S.log_prob(torch.from_numpy(bins.reshape(-1,1)).float().to(device)).exp().detach().cpu().numpy()
+    np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/valloss.npy', valloss)
+    np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/trainloss.npy', trainloss)
 
-    #Data = w_ * Signal.flatten() + (1-w_) * Background.flatten()
-
-    #plt.plot(bins, Background, label='model B')
-    #plt.plot(bins, Signal, label='model S')
-    #plt.plot(bins, Data, label='w * S + (1-w) * B with w=%.5f' % w_)
-    #plt.hist(X_train[y_train==0], bins=bins, label='back' , density=True, histtype='step')
-    #plt.hist(X_train[y_train==1], bins=bins, label='data', density=True, histtype='step')
-    #plt.legend(frameon=False)
-   # wandb.log({'model': wandb.Image(figure)})
-   # plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/model.png')
-   # plt.show()
 
     wandb.finish()
 

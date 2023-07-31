@@ -6,9 +6,10 @@
 #SBATCH --nodes=1                 # Number of nodes you require
 #SBATCH --ntasks=1                # Total # of tasks across all nodes
 #SBATCH --cpus-per-task=1         # Cores per task (>1 if multithread tasks)
+#SBATCH --array=0-19              # Uncomment for multiple jobs
 #SBATCH --gres=gpu:1              # Number of GPUs per node
-#SBATCH --mem=6000                # Real memory (RAM) required (MB)
-#SBATCH --time=10:00:00           # Total run time limit (HH:MM:SS)
+#SBATCH --mem=8000                # Real memory (RAM) required (MB)
+#SBATCH --time=3:00:00           # Total run time limit (HH:MM:SS)
 
 
 cd /scratch/rd804/m-anode/
@@ -24,12 +25,13 @@ sig=$4
 
 
 python scripts/m_anode_fixed_w_resample.py --sig_train=${sig} --sig_test=10 \
-        --mini_batch=256 --mode_background='true' --epochs=500 \
-        --gaussian_dim=2 --ensemble \
+        --mini_batch=2048 --mode_background='true' --epochs=500 \
+        --gaussian_dim=2 --shuffle_split \
+        --split=${SLURM_ARRAY_TASK_ID}   \
         --true_w --resample --seed=${try_} \
         --wandb_group=${group_name} \
         --wandb_job_type=${job_type}'_'${sig} \
-        --wandb_run_name='try_'${try_} \
+        --wandb_run_name='try_'${try_}'_'${SLURM_ARRAY_TASK_ID} \
         --data_loss_expr='true_likelihood'
 
         
