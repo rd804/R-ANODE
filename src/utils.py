@@ -3,8 +3,69 @@ from sklearn.metrics import roc_curve, roc_auc_score
 from sklearn.cluster import KMeans
 from scipy.stats import norm
 import torch
-
+from src.density_estimator import DensityEstimator
 # SIC curve
+
+# some data preprocessing functions
+def logit_transform(x, min_vals, max_vals):
+    with np.errstate(divide='ignore', invalid='ignore'):
+        x_norm = (x - min_vals) / (max_vals - min_vals)
+        logit = np.log(x_norm / (1 - x_norm))
+    domain_mask = ~(np.isnan(logit).any(axis=1) | np.isinf(logit).any(axis=1))
+    return logit, domain_mask
+
+def standardize(x, mean, std):
+    return (x - mean) / std
+
+def inverse_logit_transform(x, min_vals, max_vals):
+    x_norm = 1 / (1 + np.exp(-x))
+    return x_norm * (max_vals - min_vals) + min_vals
+
+def inverse_standardize(x, mean, std):
+    return x * std + mean
+
+
+
+def preprocess_params_fit(data):
+    preprocessing_params = {}
+    preprocessing_params["min"] = np.min(data[:, 1:-1], axis=0)
+    preprocessing_params["max"] = np.max(data[:, 1:-1], axis=0)
+
+    preprocessed_data_x, mask = logit_transform(data[:, 1:-1], preprocessing_params["min"], preprocessing_params["max"])
+    preprocessed_data = np.hstack([data[:, 0:1], preprocessed_data_x, data[:, -1:]])[mask]
+
+    preprocessing_params["mean"] = np.mean(preprocessed_data[:, 1:-1], axis=0)
+    preprocessing_params["std"] = np.std(preprocessed_data[:, 1:-1], axis=0)
+
+    return preprocessing_params
+
+def preprocess_params_transform(data, params):
+    preprocessed_data_x, mask = logit_transform(data[:, 1:-1],
+                                                 params["min"], params["max"])
+    preprocessed_data = np.hstack([data[:, 0:1], 
+                                   preprocessed_data_x, data[:, -1:]])[mask]
+    preprocessed_data[:, 1:-1] = standardize(preprocessed_data[:, 1:-1], 
+                                             params["mean"], params["std"])
+
+
+
+    return preprocessed_data
+
+
+
+def evaluate_log_prob(model, data, preprocessing_params):
+    logit_prob = model.model.log_probs(data[:, 1:-1], data[:,0].reshape(-1,1))
+    log_prob = logit_prob + np.sum(
+    np.log(
+        2 * (1 + torch.cosh(data[:, 1:-1] * preprocessing_params["std"] + preprocessing_params["mean"]))
+        / (preprocessing_params["std"] * (preprocessing_params["max"] - preprocessing_params["min"]))
+    ), axis=1
+)
+
+
+
+
+
 
 def SIC_fpr(label, score, fpr_target):
     fpr, tpr, thresholds = roc_curve(label, score)
