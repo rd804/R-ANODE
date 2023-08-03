@@ -25,7 +25,6 @@ parser.add_argument('--batch_size', type=int, default=256)
 
 parser.add_argument('--resample', action='store_true', help='if data is to resampled')
 parser.add_argument('--seed', type=int, default=22, help='seed')
-parser.add_argument('--gaussian_dim',  default=1, type=int,help='dimension of gaussian')
 parser.add_argument('--shuffle_split', action='store_true', help='if shuffle split is used')
 parser.add_argument('--split', type=int, default=1, help='split number')
 
