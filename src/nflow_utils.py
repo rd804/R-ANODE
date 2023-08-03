@@ -36,28 +36,6 @@ class Net(nn.Module):
         x = nn.Sigmoid()(x)
         return x
 
-class gaussian_prob(nn.Module):
-    def __init__(self, mean, sigma, dim=1):
-        super(gaussian_prob, self).__init__()
-        self.dim = dim
-        if dim ==1:
-            self.mean = mean
-            self.sigma = sigma
-        else:
-            self.mean = torch.tensor([mean for _ in range(dim)])
-            self.sigma = torch.tensor([sigma for _ in range(dim)])
-    
-    def log_prob(self, x):
-        if self.dim == 1:
-            p = torch.exp(-0.5 * ((x - self.mean) / self.sigma)**2) / (self.sigma * np.sqrt(2 * np.pi))
-        else:
-            p = 1
-            for i,(mean, sigma) in enumerate(zip(self.mean, self.sigma)):
-
-                p *= torch.exp(-0.5 * ((x[:,i] - mean) / sigma)**2) / (sigma * np.sqrt(2 * np.pi))
-
-        return torch.log(p + 1e-32)
-
 
 
 
@@ -89,57 +67,6 @@ def flows_for_gaussian(gaussian_dim = 2, num_transforms = 2, num_blocks = 3,
 
 
 
-
-def define_model(nhidden=1,hidden_size=200,nblocks=8,nbins=8,embedding=None,
-                 dropout=0.05,nembedding=20,nfeatures=2,tailbound=15,
-                 device='cpu', base_dist='normal', init_id=True,
-                 low = 0.0, high = 1.0):
-    
-    flow_params_RQS = {'num_blocks':nhidden, # num of hidden layers per block
-                       'use_residual_blocks':False,
-                       'use_batch_norm':False,
-                       'dropout_probability':dropout,
-                       'activation':getattr(F, 'relu'),
-                       'random_mask':False,
-                       'num_bins':nbins,
-                       'tails':'linear',
-                       'tail_bound':tailbound,
-                       'min_bin_width': 1e-6,
-                       'min_bin_height': 1e-6,
-                       'min_derivative': 1e-6}
-    flow_blocks = []
-    for i in range(nblocks):
-        flow_blocks.append(
-            transforms.MaskedPiecewiseRationalQuadraticAutoregressiveTransform(
-                **flow_params_RQS,
-                features=nfeatures,
-#                context_features=ncontext,
-                hidden_features=hidden_size
-            ))
-        if init_id:
-            torch.nn.init.zeros_(flow_blocks[-1].autoregressive_net.final_layer.weight)
-            torch.nn.init.constant_(flow_blocks[-1].autoregressive_net.final_layer.bias,
-                                    np.log(np.exp(1 - 1e-6) - 1))
-
-        if i%2 == 0:
-            flow_blocks.append(transforms.ReversePermutation(nfeatures))
-        else:
-            flow_blocks.append(transforms.RandomPermutation(nfeatures))
-
-    del flow_blocks[-1]
-    flow_transform = transforms.CompositeTransform(flow_blocks)
-    if base_dist == 'normal':
-        flow_base_distribution = distributions.StandardNormal(shape=[nfeatures])
-    elif base_dist == 'normal with mean and scale':
-        # distribution with mean and scale
-        pass
-
-    flow = flows.Flow(transform=flow_transform, distribution=flow_base_distribution)
-
-    model = flow.to(device)
-    #print(model)
-    
-    return model
 
 
 
@@ -357,137 +284,39 @@ def m_anode_test(model_S,model_B,w,optimizer,data_loader, device='cpu',
     return total_loss
 
 
-def m_anode_EM(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0, device='cpu', mode='train',mode_background='train', clip_grad=False,
-            data_loss_expr = 'true_likelihood', w_train = True ):
+
+
+def anode(model,train_loader, params, device='cpu', mode='train'):
     
-    '''EM algorithm for model_S and model_B'''
-
     if mode == 'train':
-        model_S.train()
-
-        w.requires_grad = w_train
-            
-        if mode_background == 'train' or mode_background == 'pretrained':
-            model_B.train()
-            print('training both models')
-        else:
-            model_B.eval()
-
+        model.model.train()
     else:
-        model_S.eval()
-        model_B.eval()
-        w.requires_grad = False
-
+        model.model.eval()
+    
     total_loss = 0
 
-    # Initialize the weights
-    
 
-    for batch_idx, data_ in enumerate(data_loader):
-        # E-step
-        data, label = data_
-        data = data.to(device)
-        label = label.to(device)
-        label  = label.reshape(-1,)
-
-
-        with torch.no_grad():
-            p_x_b = torch.exp(model_B.log_prob(data))
-            p_x_s = torch.exp(model_S.log_prob(data))
-
-
-
-            p_b_x = p_x_b * (1-w) / (p_x_b * (1-w) + p_x_s * w)
-            p_s_x = 1 - p_b_x
-           
-           
-            p_b = p_b_x.mean()
-            p_s = 1.0 - p_b
-
-            print('p_b: ', p_b.item(), 'p_s: ', p_s.item())
-
-            # w = torch.nan_to_num(p_s, nan=0.0, posinf=0.0, neginf=0.0)
-
-        if mode == 'train':
-            optimizer.zero_grad()
-
-
-
-        # M-step
-        # define data losses for signal and background
-        if data_loss_expr == 'expectation_likelihood':
-            data_loss = (p_s_x[label==1] * model_S.log_prob(data[label==1])).sum() + (p_b_x[label==1] * model_B.log_prob(data[label==1])).sum()
-        else:
-            pass
-
-        loss = -data_loss
-
-        print('w: ', w.item(), 'loss: ', loss.item())
-
-        if np.isnan(loss.item()):
+    for batch_idx, data in enumerate(train_loader):
+        if batch_idx == 5:
             break
 
-        total_loss += loss.item()
-
-    return total_loss, w
-
-
-
-# training
-
-def train(model,optimizer,train_loader,noise_data=0,noise_context=0, device='cpu'):
-    
-    model.train()
-    train_loss = 0
-
- #   pbar = tqdm(total=len(train_loader.dataset),leave=True)
-    for batch_idx, data in enumerate(train_loader):
-#        print(data)
-#        data+=noise_data*torch.normal(mean=torch.zeros(data.shape),std=torch.ones(data.shape))
         data = data.to(device)
 
-#        cond_data = cond_data.float()
-#        cond_data+=noise_context*torch.normal(mean=torch.zeros(cond_data.shape),std=torch.ones(cond_data.shape))
-#        cond_data = cond_data.to(device)
+        if mode == 'train':
+            model.optimizer.zero_grad()
         
-        optimizer.zero_grad()
-        # print(data, cond_data)
-#        loss = -model(data, cond_data).mean()
-        loss = -model.log_prob(data).mean()
-        train_loss += loss.item()
-        loss.backward()
-        
-    
-#        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.01)
-        
-        optimizer.step()
+        loss = -evaluate_log_prob(model, data, params).sum()
+        total_loss += loss.item()
 
-    train_loss=train_loss
-    train_loss=train_loss/len(train_loader.dataset)
+        if mode == 'train':
+            loss.backward()        
+            model.optimizer.step()
 
-    return train_loss
+
+    return total_loss
     
 
-# validation
 
-def val(model,val_loader,device='cpu'):
-
-    valloss=0
-    model.eval()
-    with torch.no_grad():
-
-        for batch_idx, data in enumerate(val_loader):
-            data = data.to(device)
-            valloss+=-model.log_prob(data).mean()
-#            print(valloss)
-#            cond_data = cond_data.float()
-#            cond_data = cond_data.to(device)
-#            valloss+=-model(data, cond_data).sum()
-
-    valloss=valloss.cpu().detach().numpy()
-    valloss=valloss/len(val_loader.dataset)
-    
-    return valloss
 
 
 

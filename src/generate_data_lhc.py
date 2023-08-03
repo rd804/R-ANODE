@@ -31,7 +31,7 @@ def separate_SB_SR(data, minmass, maxmass):
 
 
 # the "data" containing too much signal
-def resample_split(data_dir, n_sig = 1000 , resample_seed = 1,
+def resample_split(data_dir, n_sig = 1000 , resample_seed = 1,\
                    minmass = 3.3, maxmass = 3.7, resample = True):
     background = np.load(f'{data_dir}/data_bg.npy')
     signal = np.load(f'{data_dir}/data_sig.npy')[:-30_000]

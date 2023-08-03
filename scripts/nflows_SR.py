@@ -41,7 +41,7 @@ parser.add_argument('--wandb_run_name', type=str, default='try_')
 args = parser.parse_args()
 
 
-CUDA = True
+CUDA = False
 device = torch.device("cuda:0" if CUDA else "cpu")
 
 job_name = args.wandb_job_type
@@ -56,14 +56,18 @@ if args.wandb:
 
 
 print(device)
-)
-x_train,_, true_w, sigma = resample_split(args.data_dir,n_sig=args.n_sig, resample=args.resample, resample_seed=args.seed)
 
+SR_data, CR_data , true_w, sigma = resample_split(args.data_dir, n_sig = args.n_sig, resample_seed = args.seed,resample = args.resample)
 
+print('x_train shape', SR_data.shape)
+print('true_w', true_w)
+print('sigma', sigma)
+
+pre_parameters = preprocess_params_fit(SR_data)
+x_train = preprocess_params_transform(SR_data, pre_parameters) 
 
 if not args.shuffle_split:    
     data_train, data_val = train_test_split(x_train, test_size=0.1, random_state=args.seed)
-    background_train, background_val = train_test_split(background, test_size=0.1, random_state=args.seed)
 else:
     ss_data = ShuffleSplit(n_splits=20, test_size=0.1, random_state=22)
 
@@ -76,17 +80,18 @@ else:
 
 
 
-x_test = np.load(f'{args.data_dir}/x_test.npy')
-#label_test = data['10']['val']['label']
+_x_test = np.load(f'{args.data_dir}/x_test.npy')
+x_test = preprocess_params_transform(_x_test, pre_parameters)
 
 
 
-traintensor = torch.from_numpy(data_train.astype('float32').reshape((-1,args.gaussian_dim)))
-valtensor = torch.from_numpy(data_val.astype('float32').reshape((-1,args.gaussian_dim)))
-testtensor = torch.from_numpy(x_test.astype('float32').reshape((-1,args.gaussian_dim)))
+traintensor = torch.from_numpy(data_train.astype('float32'))
+valtensor = torch.from_numpy(data_val.astype('float32'))
+testtensor = torch.from_numpy(x_test.astype('float32'))
 
 print('X_train shape', traintensor.shape)
 print('X_val shape', valtensor.shape)
+print('X_test shape', testtensor.shape)
 
 # Use the standard pytorch DataLoader
 batch_size = args.batch_size
@@ -97,15 +102,11 @@ valloader = torch.utils.data.DataLoader(valtensor, batch_size=test_batch_size, s
 testloader = torch.utils.data.DataLoader(testtensor, batch_size=test_batch_size, shuffle=False)
 
 
-model = flows_for_gaussian(gaussian_dim = args.gaussian_dim, num_transforms = 2, num_blocks = 3, 
-                       hidden_features = 32, device = device)
-
-
 
 # # %%
 # define savepath
 save_path = 'results/'+args.wandb_group+'/'\
-            +job_name+'/'+name+'/'
+            +job_name+'/'+args.wandb_run_name+'/'
 
 if not os.path.exists(save_path):
     os.makedirs(save_path)
@@ -114,21 +115,29 @@ if not os.path.exists(save_path):
 trainloss_list=[]
 valloss_list=[]
 
-optimizer = torch.optim.Adam(model.parameters()) #,lr=1e-4)#, lr=1e-4)
+config_file = "./scripts/DE_MAF_model.yml"
+model = DensityEstimator(config_file, eval_mode=False, device=device)
+
 ##############
 # train model
 for epoch in range(args.epochs):
-    trainloss= train(model,optimizer,trainloader,device=device)
-    valloss= val(model,valloader,device=device)
+    trainloss=anode(model,trainloader, pre_parameters ,device=device, mode='train')
+    valloss=anode(model,valloader, pre_parameters, device=device, mode='val')
 
-    torch.save(model.state_dict(), save_path+'model_SR_'+str(epoch)+'.pt')
+    torch.save(model.model.state_dict(), save_path+'model_SR_'+str(epoch)+'.pt')
 
     valloss_list.append(valloss)
     trainloss_list.append(trainloss)
-    wandb.log({'train_loss': trainloss, 'val_loss': valloss, 'epoch': epoch})
+
+    print('epoch: ', epoch, 'trainloss: ', trainloss, 'valloss: ', valloss)
+
+    if args.wandb:
+        wandb.log({'train_loss': trainloss, 'val_loss': valloss, 'epoch': epoch})
 
 trainloss_list=np.array(trainloss_list)
 valloss_list=np.array(valloss_list)
+
+
 np.save(save_path+'trainloss_list.npy', trainloss_list)
 np.save(save_path+'valloss_list.npy', valloss_list)
 
@@ -142,53 +151,48 @@ min_epoch=np.argmin(valloss_list)
 print('min epoch SR: ',min_epoch)
 
 #min_epoch = args.epochs-1
-model.load_state_dict(torch.load(save_path+'model_SR_'+str(min_epoch)+'.pt'))
-torch.save(model.state_dict(), save_path+'model_SR_best.pt')
+model.model.load_state_dict(torch.load(save_path+'model_SR_'+str(min_epoch)+'.pt'))
+torch.save(model.model.state_dict(), save_path+'model_SR_best.pt')
 
 
 # check density estimation
-model.eval()
+model.model.eval()
+
+mass_test = testtensor[:,0].reshape(-1,1).to(device)
 with torch.no_grad():
-    x_samples = model.sample(10000).cpu().detach().numpy()
+    x_samples = model.model.sample(10000, cond_inputs=mass_test ).cpu().detach().numpy()
+    x_samples = inverse_transform(x_samples, pre_parameters)
 
 
-if args.gaussian_dim == 2:
+for i in range(5):
     figure=plt.figure()
     #if dims > 1:
-    plt.hist2d(x_samples[:,0],x_samples[:,1],bins=100, density=True, label='nflow for 2d')
+    plt.hist(testtensor[:,i],bins=100, density=True, label=f'data for {i}')
+    plt.hist(x_samples[:,i],bins=100, density=True, label=f'nflow sample for {i}')
+    plt.legend(loc='upper right')
+    plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/nflow_{i}.png')
+    if args.wandb:
+        wandb.log({f'nflow_SR': wandb.Image(figure)})
 
-    wandb.log({f'nflow_SR': wandb.Image(figure)})
     plt.close()
 
 # compute scores
 model.eval()
 with torch.no_grad():
-    log_p = model.log_prob(testtensor.to(device)).cpu().detach().numpy()
+    log_p = evaluate_log_prob(model, testtensor, pre_parameters).cpu().detach().numpy()
+
     data_p = np.exp(log_p)
 
 
-
-back_p = p_back(x_test,back_mean, back_sigma, dim=args.gaussian_dim)
+print('data_p', data_p.shape)
+print('data_p', data_p[:10])
 
 likelihood = data_p / back_p
 
-true_likelihoods = {}
-true_likelihoods[str(sig_train)] = {}
-
-
-w1 = true_w[str(sig_train)][0]
-w2 = true_w[str(sig_train)][1]
-
-
-
-true_likelihoods[str(sig_train)] = p_data(x_test,[sig_mean, back_mean],[sig_sigma,back_sigma],
-                [w1, w2], dim=args.gaussian_dim)/p_back(x_test,back_mean, back_sigma, dim=args.gaussian_dim)
 
 
 
 
-
-sic_true , tpr_true , auc_true = SIC(label_test, true_likelihoods[str(sig_train)])
 sic_score , tpr_score , auc_score = SIC(label_test, likelihood)
 
 figure = plt.figure()
