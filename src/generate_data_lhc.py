@@ -10,8 +10,6 @@ from sklearn.utils import shuffle
 
 
 
-
-
 def deltaR(features_df):
     j1_vec = vector.array({
         "px": np.array(features_df[["pxj1"]]),
@@ -34,16 +32,20 @@ def separate_SB_SR(data, minmass, maxmass):
 
 # the "data" containing too much signal
 def resample_split(data_dir, n_sig = 1000 , resample_seed = 1,
-                   minmass = 3.3, maxmass = 3.7):
+                   minmass = 3.3, maxmass = 3.7, resample = True):
     background = np.load(f'{data_dir}/data_bg.npy')
     signal = np.load(f'{data_dir}/data_sig.npy')[:-30_000]
 
     # choose 1000 signal events
     # random choice of 1000 signal events
-    print(f'choosing {n_sig} signal events for mock_data from {len(signal)} events')
-    np.random.seed(resample_seed)
-    choice = np.random.choice(len(signal), n_sig, replace=False)
-    signal = signal[choice]
+    if resample:
+        print(f'choosing random {n_sig} signal events for mock_data from {len(signal)} events')
+        np.random.seed(resample_seed)
+        choice = np.random.choice(len(signal), n_sig, replace=False)
+        signal = signal[choice]
+    else:
+        print(f'using first {n_sig} signal events for mock_data from {len(signal)} events')
+        signal = signal[:n_sig]
 
 
     # concatenate background and signal

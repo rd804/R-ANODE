@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import yaml
-import flows as fnn
+import src.flows as fnn
 
 
 class DensityEstimator:
@@ -104,6 +104,9 @@ class DensityEstimator:
 
         if eval_mode:
             self.model.eval()
+        
+        if not eval_mode:
+            self.model.train()
 
     def build_block(self, modules, params):
         raise NotImplementedError

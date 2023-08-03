@@ -2,12 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
 from src.nflow_utils import *
+from src.generate_data_lhc import *
+from src.utils import *
+from src.flows import *
 import os
 
 from nflows import transforms, distributions, flows
 import torch
 import torch.nn.functional as F
-from nflows.distributions import uniform
 from sklearn.utils import shuffle
 # import train_test_split
 from sklearn.model_selection import train_test_split, ShuffleSplit
@@ -18,7 +20,7 @@ import pickle
 #os.environ["CUDA_VISIBLE_DEVICES"]='2'
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--sig_train', default=10)
+parser.add_argument('--n_sig', default=1000)
 parser.add_argument('--try_', type=int, default=0)
 parser.add_argument('--epochs', type=int, default=2)
 parser.add_argument('--batch_size', type=int, default=256)
@@ -27,10 +29,10 @@ parser.add_argument('--resample', action='store_true', help='if data is to resam
 parser.add_argument('--seed', type=int, default=22, help='seed')
 parser.add_argument('--shuffle_split', action='store_true', help='if shuffle split is used')
 parser.add_argument('--split', type=int, default=1, help='split number')
+parser.add_argument('--data_dir', type=str, default='data/lhc_co', help='data directory')
 
 
-
-
+parser.add_argument('--wandb', action='store_true', help='if wandb is used')
 parser.add_argument('--wandb_group', type=str, default='test')
 parser.add_argument('--wandb_job_type', type=str, default='SR')
 parser.add_argument('--wandb_run_name', type=str, default='try_')
@@ -44,90 +46,20 @@ device = torch.device("cuda:0" if CUDA else "cpu")
 
 job_name = args.wandb_job_type
 
-# initialize wandb
-wandb.init(project="m-anode", config=args,
-           group=args.wandb_group, job_type=job_name)
+# initialize wandb for logging
+if args.wandb:
+    wandb.init(project="r_anode", config=args,
+            group=args.wandb_group, job_type=job_name)
 
-name = args.wandb_run_name
-wandb.run.name = name
+    name = args.wandb_run_name
+    wandb.run.name = name
 
-
-
-kwargs = {'num_workers': 4, 'pin_memory': True} if CUDA else {}
-kwargs = {}
 
 print(device)
-
-if args.gaussian_dim == 1:
-    with open('data/data.pkl', 'rb') as f:
-        data = pickle.load(f)
+)
+x_train,_, true_w, sigma = resample_split(args.data_dir,n_sig=args.n_sig, resample=args.resample, resample_seed=args.seed)
 
 
-    with open('data/background.pkl', 'rb') as f:
-        background = pickle.load(f)
-
-
-
-    sig_train = args.sig_train
-    back_mean = 0
-    sig_mean = 3
-    sig_sigma = 0.5
-    back_sigma = 3
-
-else:
-    with open(f'data/data_{args.gaussian_dim}d.pkl', 'rb') as f:
-        data = pickle.load(f)
-
-    with open(f'data/background_{args.gaussian_dim}d.pkl', 'rb') as f:
-        background = pickle.load(f)
-
-    with open(f'data/true_w_{args.gaussian_dim}d.pkl', 'rb') as f:
-        true_w = pickle.load(f)
-
-    sig_train = args.sig_train
-    back_mean = 0
-    sig_mean = 2
-    sig_sigma = 0.25
-    back_sigma = 3
-
-#    print(true_w[str(sig_train)])
-
-
-
-if not args.resample:
-    x_train = data[str(sig_train)]['train']['data']
-    x_train = shuffle(x_train, random_state=10)
-
-else:
-
-    sig_train = args.sig_train
-    true_w = {}
-
-    n_back = 200_000
-    n_sig = int(np.sqrt(n_back) * float(sig_train))
-    weight = n_sig/(n_sig + n_back)
-    
-    true_w[str(sig_train)] = [weight, 1-weight]
-
-    # set seed
-    if args.gaussian_dim == 1:
-        np.random.seed(args.seed)
-        x_back = np.random.normal(back_mean, back_sigma, n_back)
-        np.random.seed(args.seed)
-        x_sig = np.random.normal(sig_mean, sig_sigma, n_sig)
-    else:
-        np.random.seed(args.seed)
-        x_back = np.random.normal(back_mean, back_sigma, (n_back, args.gaussian_dim))
-        np.random.seed(args.seed)
-        x_sig = np.random.normal(sig_mean, sig_sigma, (n_sig, args.gaussian_dim))
-
-    x_train = np.concatenate((x_back, x_sig), axis=0)
-    x_train = shuffle(x_train,random_state=args.seed)
-
-    print('resampled data with seed %d' % args.seed)
-    print('amount of background: %d' % n_back)
-    print('amount of signal: %d' % n_sig)
-    print(f'total amount of data: {len(x_train)}')
 
 if not args.shuffle_split:    
     data_train, data_val = train_test_split(x_train, test_size=0.1, random_state=args.seed)
@@ -144,8 +76,8 @@ else:
 
 
 
-x_test = data['10']['val']['data']
-label_test = data['10']['val']['label']
+x_test = np.load(f'{args.data_dir}/x_test.npy')
+#label_test = data['10']['val']['label']
 
 
 
