@@ -53,15 +53,7 @@ def preprocess_params_transform(data, params):
 
 
 
-def evaluate_log_prob(model, data, preprocessing_params):
-    logit_prob = model.model.log_probs(data[:, 1:-1], data[:,0].reshape(-1,1))
-    log_prob = logit_prob.flatten() + torch.sum(
-    torch.log(
-        2 * (1 + torch.cosh(data[:, 1:-1] * preprocessing_params["std"] + preprocessing_params["mean"]))
-        / (preprocessing_params["std"] * (preprocessing_params["max"] - preprocessing_params["min"]))
-    ), axis=1
-)
-    return log_prob
+
 
 
 def inverse_transform(data, preprocessing_params):

@@ -16,11 +16,12 @@ from sklearn.model_selection import train_test_split, ShuffleSplit
 import argparse
 import wandb
 import pickle
+import sys
 
 #os.environ["CUDA_VISIBLE_DEVICES"]='2'
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--n_sig', default=1000)
+parser.add_argument('--n_sig',type=int , default=1000)
 parser.add_argument('--try_', type=int, default=0)
 parser.add_argument('--epochs', type=int, default=2)
 parser.add_argument('--batch_size', type=int, default=256)
@@ -30,7 +31,8 @@ parser.add_argument('--seed', type=int, default=22, help='seed')
 parser.add_argument('--shuffle_split', action='store_true', help='if shuffle split is used')
 parser.add_argument('--split', type=int, default=1, help='split number')
 parser.add_argument('--data_dir', type=str, default='data/lhc_co', help='data directory')
-
+parser.add_argument('--config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
+parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/manuel_flows/training_1', help='CR data path')
 
 parser.add_argument('--wandb', action='store_true', help='if wandb is used')
 parser.add_argument('--wandb_group', type=str, default='test')
@@ -39,9 +41,14 @@ parser.add_argument('--wandb_run_name', type=str, default='try_')
 
 
 args = parser.parse_args()
+save_path = 'results/'+args.wandb_group+'/'\
+            +args.wandb_job_type+'/'+args.wandb_run_name+'/'
 
+if os.path.exists(f'{save_path}best_val_loss_scores.npy'):
+    print(f'already done {args.wandb_run_name}')
+    sys.exit()
 
-CUDA = False
+CUDA = True
 device = torch.device("cuda:0" if CUDA else "cpu")
 
 job_name = args.wandb_job_type
@@ -62,6 +69,10 @@ SR_data, CR_data , true_w, sigma = resample_split(args.data_dir, n_sig = args.n_
 print('x_train shape', SR_data.shape)
 print('true_w', true_w)
 print('sigma', sigma)
+
+if args.wandb:
+    wandb.config.update({'true_w': true_w, 'sigma': sigma})
+
 
 pre_parameters = preprocess_params_fit(SR_data)
 x_train = preprocess_params_transform(SR_data, pre_parameters) 
@@ -108,6 +119,7 @@ testloader = torch.utils.data.DataLoader(testtensor, batch_size=test_batch_size,
 save_path = 'results/'+args.wandb_group+'/'\
             +job_name+'/'+args.wandb_run_name+'/'
 
+
 if not os.path.exists(save_path):
     os.makedirs(save_path)
     
@@ -115,14 +127,14 @@ if not os.path.exists(save_path):
 trainloss_list=[]
 valloss_list=[]
 
-config_file = "./scripts/DE_MAF_model.yml"
-model = DensityEstimator(config_file, eval_mode=False, device=device)
+
+model = DensityEstimator(args.config_file, eval_mode=False, device=device)
 
 ##############
 # train model
 for epoch in range(args.epochs):
-    trainloss=anode(model,trainloader, pre_parameters ,device=device, mode='train')
-    valloss=anode(model,valloader, pre_parameters, device=device, mode='val')
+    trainloss=anode(model.model,trainloader,model.optimizer,pre_parameters ,device=device, mode='train')
+    valloss=anode(model.model,valloader,model.optimizer,pre_parameters, device=device, mode='val')
 
     torch.save(model.model.state_dict(), save_path+'model_SR_'+str(epoch)+'.pt')
 
@@ -158,9 +170,9 @@ torch.save(model.model.state_dict(), save_path+'model_SR_best.pt')
 # check density estimation
 model.model.eval()
 
-mass_test = testtensor[:,0].reshape(-1,1).to(device)
+mass_test = testtensor[:,0].reshape(-1,1).type(torch.FloatTensor).to(device)
 with torch.no_grad():
-    x_samples = model.model.sample(10000, cond_inputs=mass_test ).cpu().detach().numpy()
+    x_samples = model.model.sample(len(mass_test), cond_inputs=mass_test ).cpu().detach().numpy()
     x_samples = inverse_transform(x_samples, pre_parameters)
 
 
@@ -170,47 +182,61 @@ for i in range(5):
     plt.hist(testtensor[:,i],bins=100, density=True, label=f'data for {i}')
     plt.hist(x_samples[:,i],bins=100, density=True, label=f'nflow sample for {i}')
     plt.legend(loc='upper right')
-    plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/nflow_{i}.png')
+    plt.savefig(f'{save_path}/nflow_{i}.png')
     if args.wandb:
         wandb.log({f'nflow_SR': wandb.Image(figure)})
 
     plt.close()
 
 # compute scores
-model.eval()
+model.model.eval()
 with torch.no_grad():
-    log_p = evaluate_log_prob(model, testtensor, pre_parameters).cpu().detach().numpy()
+    data_log_p = evaluate_log_prob(model.model, testtensor, pre_parameters).cpu().detach().numpy()
 
-    data_p = np.exp(log_p)
+   # data_p = np.exp(log_p)
+
+print('data_p', data_log_p.shape)
+print('data_p', data_log_p[:10])
+
+#likelihood = data_p / back_p
+
+# load CR model
+
+val_losses = np.load(f'{args.CR_path}/my_ANODE_model_val_losses.npy')
+best_epoch = np.argmin(val_losses)
+model = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/my_ANODE_model_epoch_{best_epoch}.par", device=device)
+
+model.model.eval()
+with torch.no_grad():
+    background_log_p = evaluate_log_prob(model.model, testtensor, pre_parameters).cpu().detach().numpy()
 
 
-print('data_p', data_p.shape)
-print('data_p', data_p[:10])
 
-likelihood = data_p / back_p
-
-
-
-
+likelihood = (data_log_p - background_log_p)
+label_test = testtensor[:,-1].cpu().detach().numpy()
 
 sic_score , tpr_score , auc_score = SIC(label_test, likelihood)
 
 figure = plt.figure()
 
-plt.plot(tpr_true, sic_true, label='true')
 plt.plot(tpr_score, sic_score, label='score')
+plt.plot(tpr_score, tpr_score**0.5, label='random')
+plt.xlabel('signal efficiency')
+plt.ylabel('SIC')
 
 plt.legend(loc='lower right')
-wandb.log({'SIC': wandb.Image(figure)})
-plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/SIC.png')
+if args.wandb:
+    wandb.log({'SIC': wandb.Image(figure)})
+    wandb.log({'AUC': auc_score, 'max SIC': np.max(sic_score)})
+
+plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/SIC.png')
 plt.show()
 
-wandb.log({'AUC': auc_score, 'max SIC': np.max(sic_score)})
 
 # save scores
-np.save(save_path+'best_val_loss_scores.npy', data_p)
+np.save(save_path+'best_val_loss_scores.npy', data_log_p)
 
 
-
-wandb.finish()
+if args.wandb:
+    wandb.finish()
     

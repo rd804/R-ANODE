@@ -21,14 +21,15 @@ conda activate manode
 try_=$1
 group_name=$2
 job_type=$3
-sig=$4
+n_sig=$4
 
-python scripts/nflows_SR.py --try ${try_} --gaussian_dim=2 \
-    --epochs=500 --batch_size=2048 --shuffle_split \
+python scripts/nflows_SR.py --try ${try_} \
+    --epochs=100 --batch_size=256 --shuffle_split \
     --split=${SLURM_ARRAY_TASK_ID} --resample --seed ${try_} \
-    --wandb_group ${group_name} --wandb_job_type ${job_type}_${sig} \
+    --wandb \
+    --wandb_group ${group_name} --wandb_job_type ${job_type}_${n_sig} \
     --wandb_run_name try_${try_}_${SLURM_ARRAY_TASK_ID} \
     --split=${SLURM_ARRAY_TASK_ID} \
-    --sig_train ${sig}
+    --n_sig ${n_sig}
 
 

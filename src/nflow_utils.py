@@ -286,12 +286,12 @@ def m_anode_test(model_S,model_B,w,optimizer,data_loader, device='cpu',
 
 
 
-def anode(model,train_loader, params, device='cpu', mode='train'):
+def anode(model,train_loader, optimizer, params, device='cpu', mode='train'):
     
     if mode == 'train':
-        model.model.train()
+        model.train()
     else:
-        model.model.eval()
+        model.eval()
     
     total_loss = 0
 
@@ -301,22 +301,32 @@ def anode(model,train_loader, params, device='cpu', mode='train'):
             break
 
         data = data.to(device)
+        #params = params.to(device)
 
         if mode == 'train':
-            model.optimizer.zero_grad()
+            optimizer.zero_grad()
         
-        loss = -evaluate_log_prob(model, data, params).sum()
+        loss = - evaluate_log_prob(model, data, params).mean()
         total_loss += loss.item()
 
         if mode == 'train':
             loss.backward()        
-            model.optimizer.step()
+            optimizer.step()
 
+    total_loss /= len(train_loader)
 
     return total_loss
     
 
-
+def evaluate_log_prob(model, data, preprocessing_params):
+    logit_prob = model.log_probs(data[:, 1:-1], data[:,0].reshape(-1,1))
+    log_prob = logit_prob.flatten() + torch.sum(
+    torch.log(
+        2 * (1 + torch.cosh(data[:, 1:-1] * preprocessing_params["std"] + preprocessing_params["mean"]))
+        / (preprocessing_params["std"] * (preprocessing_params["max"] - preprocessing_params["min"]))
+    ), axis=1
+) # type: ignore
+    return log_prob
 
 
 
