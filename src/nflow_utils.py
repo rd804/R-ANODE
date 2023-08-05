@@ -231,7 +231,7 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
     return total_loss, w_
 
 
-def m_anode_test(model_S,model_B,w,optimizer,data_loader, device='cpu', 
+def r_anode(model_S,model_B,w,optimizer,data_loader, params, device='cpu', 
                  mode='train', data_loss_expr = 'true_likelihood'):
     
 
@@ -242,34 +242,37 @@ def m_anode_test(model_S,model_B,w,optimizer,data_loader, device='cpu',
     else:
         model_S.eval()
         model_B.eval()
-        w.requires_grad = False
 
     total_loss = 0
 
-    for batch_idx, data_ in enumerate(data_loader):
-        data, label = data_
+    for batch_idx, data in enumerate(data_loader):
+
+        if batch_idx == 5:
+            break
+
         data = data.to(device)
-        label = label.to(device)
-        label  = label.reshape(-1,)
 
         if mode == 'train':
             optimizer.zero_grad()
 
         if data_loss_expr == 'true_likelihood':
-            if batch_idx==0:
-                assert model_S.log_prob(data[label==1,:]).shape == model_B.log_prob(data[label==1,:]).shape
-                print(torch.sigmoid(w).item())
 
-            data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
+            model_S_log_prob = evaluate_log_prob(model_S, data, params)
+            model_B_log_prob = evaluate_log_prob(model_B, data, params)
+            if batch_idx==0:
+                assert model_S_log_prob.shape == model_B_log_prob.shape
+                print(f'value of w: {w}')    
+            
+            
+            data_p = w * torch.exp(model_S_log_prob) + (1-w) * torch.exp(model_B_log_prob)
             data_loss = torch.log(data_p + 1e-32)
 
         else:
-            raise ValueError('data_loss must be either expectation_likelihood , true_likelihood, capped_sigmoid, scaled_sigmoid, with_w_scaled_KLD, with_w_weighted_KLD, with_self_weighted_KLD')
-        
+            raise ValueError('only true_likelihood is implemented')
         #############################################
         ##############################################
             
-        loss = -data_loss.sum()
+        loss = -data_loss.mean()
         total_loss += loss.item()
 
 
@@ -278,7 +281,7 @@ def m_anode_test(model_S,model_B,w,optimizer,data_loader, device='cpu',
             loss.backward()
             optimizer.step()
 
-
+    total_loss /= len(data_loader)
  
 
     return total_loss

@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from tqdm.notebook import tqdm
 from src.nflow_utils import *
 from src.generate_data_lhc import *
 from src.utils import *
@@ -35,7 +34,7 @@ parser.add_argument('--config_file', type=str, default='scripts/DE_MAF_model.yml
 parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/manuel_flows/training_1', help='CR data path')
 
 parser.add_argument('--wandb', action='store_true', help='if wandb is used')
-parser.add_argument('--wandb_group', type=str, default='test')
+parser.add_argument('--wandb_group', type=str, default='debugging_anode')
 parser.add_argument('--wandb_job_type', type=str, default='SR')
 parser.add_argument('--wandb_run_name', type=str, default='try_')
 
@@ -48,7 +47,7 @@ if os.path.exists(f'{save_path}best_val_loss_scores.npy'):
     print(f'already done {args.wandb_run_name}')
     sys.exit()
 
-CUDA = True
+CUDA = False
 device = torch.device("cuda:0" if CUDA else "cpu")
 
 job_name = args.wandb_job_type
@@ -77,6 +76,7 @@ if args.wandb:
 pre_parameters = preprocess_params_fit(SR_data)
 x_train = preprocess_params_transform(SR_data, pre_parameters) 
 
+
 if not args.shuffle_split:    
     data_train, data_val = train_test_split(x_train, test_size=0.1, random_state=args.seed)
 else:
@@ -103,6 +103,12 @@ testtensor = torch.from_numpy(x_test.astype('float32'))
 print('X_train shape', traintensor.shape)
 print('X_val shape', valtensor.shape)
 print('X_test shape', testtensor.shape)
+
+for key in pre_parameters.keys():
+    pre_parameters[key] = torch.from_numpy(pre_parameters[key].astype('float32')).to(device)
+
+
+
 
 # Use the standard pytorch DataLoader
 batch_size = args.batch_size
@@ -170,17 +176,21 @@ torch.save(model.model.state_dict(), save_path+'model_SR_best.pt')
 # check density estimation
 model.model.eval()
 
-mass_test = testtensor[:,0].reshape(-1,1).type(torch.FloatTensor).to(device)
-with torch.no_grad():
-    x_samples = model.model.sample(len(mass_test), cond_inputs=mass_test ).cpu().detach().numpy()
-    x_samples = inverse_transform(x_samples, pre_parameters)
+test_data = inverse_transform(testtensor, pre_parameters).cpu().detach().numpy()
+label_test = test_data[:,-1]
+
+model.model.eval()
+
+x_samples = generate_transformed_samples(model.model, testtensor, pre_parameters, device=device)
+
 
 
 for i in range(5):
     figure=plt.figure()
     #if dims > 1:
-    plt.hist(testtensor[:,i],bins=100, density=True, label=f'data for {i}')
-    plt.hist(x_samples[:,i],bins=100, density=True, label=f'nflow sample for {i}')
+    plt.hist(test_data[:,i],bins=100, density=True, label=f'data for {i}', histtype='step')
+    plt.hist(x_samples[:,i],bins=100, density=True, label=f'nflow sample for {i}', histtype='step')
+    plt.title(f'NFlow vs data for {i}')
     plt.legend(loc='upper right')
     plt.savefig(f'{save_path}/nflow_{i}.png')
     if args.wandb:
@@ -204,16 +214,16 @@ print('data_p', data_log_p[:10])
 
 val_losses = np.load(f'{args.CR_path}/my_ANODE_model_val_losses.npy')
 best_epoch = np.argmin(val_losses)
-model = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/my_ANODE_model_epoch_{best_epoch}.par", device=device)
+model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/my_ANODE_model_epoch_{best_epoch}.par", device=device)
 
-model.model.eval()
+model_B.model.eval()
 with torch.no_grad():
-    background_log_p = evaluate_log_prob(model.model, testtensor, pre_parameters).cpu().detach().numpy()
+    background_log_p = evaluate_log_prob(model_B.model, testtensor, pre_parameters).cpu().detach().numpy()
 
 
 
-likelihood = (data_log_p - background_log_p)
-label_test = testtensor[:,-1].cpu().detach().numpy()
+likelihood_ = (data_log_p - background_log_p)
+likelihood = np.nan_to_num(likelihood_, nan=0, posinf=0, neginf=0)        
 
 sic_score , tpr_score , auc_score = SIC(label_test, likelihood)
 
@@ -230,7 +240,7 @@ if args.wandb:
     wandb.log({'AUC': auc_score, 'max SIC': np.max(sic_score)})
 
 plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/SIC.png')
-plt.show()
+plt.close()
 
 
 # save scores
