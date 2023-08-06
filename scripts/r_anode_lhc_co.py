@@ -22,7 +22,7 @@ import sys
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--n_sig',  default=1000, help='signal train')
+parser.add_argument('--n_sig',type=int , default=1000, help='signal train')
 parser.add_argument('--mode_background', type=str, default='freeze', help='train, freeze, pretrained')
 
 
@@ -40,7 +40,7 @@ parser.add_argument('--split', type=int, default=1, help='split number')
 parser.add_argument('--data_dir', type=str, default='data/lhc_co', help='data directory')
 parser.add_argument('--config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
 parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/manuel_flows/training_1', help='CR data path')
-
+parser.add_argument('--ensemble', action='store_true', help='if ensemble is used')
 
 parser.add_argument('--wandb', action='store_true', help='if wandb is used' )
 parser.add_argument('--wandb_group', type=str, default='debugging_r_anode')
@@ -66,7 +66,7 @@ if args.wandb:
 # print wandb group
 
 
-CUDA = False
+CUDA = True
 device = torch.device(args.gpu if CUDA else "cpu")
 
 SR_data, CR_data , true_w, sigma = resample_split(args.data_dir, n_sig = args.n_sig, resample_seed = args.seed,resample = args.resample)
@@ -105,7 +105,7 @@ x_test = preprocess_params_transform(_x_test, pre_parameters)
 
 traintensor = torch.from_numpy(data_train.astype('float32'))
 valtensor = torch.from_numpy(data_val.astype('float32'))
-testtensor = torch.from_numpy(x_test.astype('float32'))
+testtensor = torch.from_numpy(x_test.astype('float32')).to(device)
 
 print('X_train shape', traintensor.shape)
 print('X_val shape', valtensor.shape)
@@ -191,7 +191,6 @@ for epoch in range(args.epochs):
 if ~np.isnan(train_loss) or ~np.isnan(val_loss):
 
   
-    args.ensemble = True
     # Load best model
     if not args.ensemble:
         index = np.argmin(valloss).flatten()[0]
@@ -228,7 +227,7 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
 
     model_S.model.eval()
 
-    x_samples = generate_transformed_samples(model_S.model, testtensor[testtensor[:,-1]==1], pre_parameters, device=device)
+    x_samples = generate_transformed_samples(model_S.model, testtensor[testtensor[:,-1]==1], pre_parameters, device=device).cpu().detach().numpy()
 
     for i in range(5):
         figure=plt.figure()
@@ -244,7 +243,7 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
         plt.close()
 
     model_B.model.eval()
-    x_samples = generate_transformed_samples(model_B.model, testtensor[testtensor[:,-1]==0], pre_parameters, device=device)
+    x_samples = generate_transformed_samples(model_B.model, testtensor[testtensor[:,-1]==0], pre_parameters, device=device).cpu().detach().numpy()
 
 
     for i in range(5):

@@ -24,11 +24,12 @@ sig=$4
 
 
 
-python scripts/m_anode_fixed_w_resample.py --sig_train=${sig} --sig_test=10 \
-        --mini_batch=2048 --mode_background='true' --epochs=500 \
-        --gaussian_dim=2 --shuffle_split \
+python scripts/r_anode_lhc_co.py --n_sig=${sig} \
+        --mini_batch=256 --mode_background='freeze' --epochs=100 \
+        --shuffle_split \
         --split=${SLURM_ARRAY_TASK_ID}   \
-        --true_w --resample --seed=${try_} \
+        --seed=${try_} \
+        --wandb \
         --wandb_group=${group_name} \
         --wandb_job_type=${job_type}'_'${sig} \
         --wandb_run_name='try_'${try_}'_'${SLURM_ARRAY_TASK_ID} \

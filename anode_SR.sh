@@ -4,7 +4,7 @@ all_sig=1
 arr=1	
 group="nflows_lhc_co"
 #group='test'
-job_type="anode_data_fit"
+job_type="anode_SR_verify"
 
 
 source ~/.bashrc
@@ -20,7 +20,7 @@ do
    # for sig in 1
     do
         arr=()
-        for j in {0..4..1}
+        for j in 1
         do
             for split in {0..19..1}
             do

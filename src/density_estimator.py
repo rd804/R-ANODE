@@ -100,7 +100,8 @@ class DensityEstimator:
         self.load_model(load_path)
 
         # Get the requested for optimizer
-        self.build_optimizer(params)
+        if not eval_mode:
+            self.build_optimizer(params)
 
         if eval_mode:
             self.model.eval()

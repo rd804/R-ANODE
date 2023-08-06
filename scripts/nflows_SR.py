@@ -32,6 +32,8 @@ parser.add_argument('--split', type=int, default=1, help='split number')
 parser.add_argument('--data_dir', type=str, default='data/lhc_co', help='data directory')
 parser.add_argument('--config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
 parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/manuel_flows/training_1', help='CR data path')
+parser.add_argument('--ensemble', action='store_true', help='if ensemble is used')
+
 
 parser.add_argument('--wandb', action='store_true', help='if wandb is used')
 parser.add_argument('--wandb_group', type=str, default='debugging_anode')
@@ -47,7 +49,7 @@ if os.path.exists(f'{save_path}best_val_loss_scores.npy'):
     print(f'already done {args.wandb_run_name}')
     sys.exit()
 
-CUDA = False
+CUDA = True
 device = torch.device("cuda:0" if CUDA else "cpu")
 
 job_name = args.wandb_job_type
@@ -80,7 +82,7 @@ x_train = preprocess_params_transform(SR_data, pre_parameters)
 if not args.shuffle_split:    
     data_train, data_val = train_test_split(x_train, test_size=0.1, random_state=args.seed)
 else:
-    ss_data = ShuffleSplit(n_splits=20, test_size=0.1, random_state=22)
+    ss_data = ShuffleSplit(n_splits=20, test_size=0.5, random_state=22)
 
     print(f'doing a shuffle split with split number {args.split}')
 
@@ -98,7 +100,7 @@ x_test = preprocess_params_transform(_x_test, pre_parameters)
 
 traintensor = torch.from_numpy(data_train.astype('float32'))
 valtensor = torch.from_numpy(data_val.astype('float32'))
-testtensor = torch.from_numpy(x_test.astype('float32'))
+testtensor = torch.from_numpy(x_test.astype('float32')).to(device)
 
 print('X_train shape', traintensor.shape)
 print('X_val shape', valtensor.shape)
@@ -149,6 +151,12 @@ for epoch in range(args.epochs):
 
     print('epoch: ', epoch, 'trainloss: ', trainloss, 'valloss: ', valloss)
 
+    if np.isnan(trainloss) or np.isnan(valloss):
+        print(' nan loss ')
+        if args.wandb:
+            wandb.finish()
+        sys.exit()
+
     if args.wandb:
         wandb.log({'train_loss': trainloss, 'val_loss': valloss, 'epoch': epoch})
 
@@ -181,7 +189,7 @@ label_test = test_data[:,-1]
 
 model.model.eval()
 
-x_samples = generate_transformed_samples(model.model, testtensor, pre_parameters, device=device)
+x_samples = generate_transformed_samples(model.model, testtensor, pre_parameters, device=device).cpu().detach().numpy()
 
 
 
@@ -199,10 +207,22 @@ for i in range(5):
     plt.close()
 
 # compute scores
-model.model.eval()
-with torch.no_grad():
-    data_log_p = evaluate_log_prob(model.model, testtensor, pre_parameters).cpu().detach().numpy()
 
+if not args.ensemble:
+    best_epoch = np.argsort(valloss_list)[0]
+else:
+    best_epoch = np.argsort(valloss_list)[0:10]
+
+data_log_p = []
+for epoch in best_epoch:
+    model.model.load_state_dict(torch.load(save_path+'model_SR_'+str(epoch)+'.pt'))
+    model.model.eval()
+    with torch.no_grad():
+        log_p = evaluate_log_prob(model.model, testtensor, pre_parameters).cpu().detach().numpy()
+        data_log_p.append(log_p)
+
+data_log_p = np.array(data_log_p)
+data_log_p = np.mean(data_log_p, axis=0)
    # data_p = np.exp(log_p)
 
 print('data_p', data_log_p.shape)
@@ -213,14 +233,24 @@ print('data_p', data_log_p[:10])
 # load CR model
 
 val_losses = np.load(f'{args.CR_path}/my_ANODE_model_val_losses.npy')
-best_epoch = np.argmin(val_losses)
-model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/my_ANODE_model_epoch_{best_epoch}.par", device=device)
 
-model_B.model.eval()
-with torch.no_grad():
-    background_log_p = evaluate_log_prob(model_B.model, testtensor, pre_parameters).cpu().detach().numpy()
+if not args.ensemble:
+    best_epoch = np.argsort(val_losses)[0]
+else:
+    best_epoch = np.argsort(val_losses)[0:10]
 
 
+background_log_p = []
+for epoch in best_epoch:
+    model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/my_ANODE_model_epoch_{epoch}.par", device=device)
+
+    model_B.model.eval()
+    with torch.no_grad():
+        log_p = evaluate_log_prob(model_B.model, testtensor, pre_parameters).cpu().detach().numpy()
+        background_log_p.append(log_p)
+
+background_log_p = np.array(background_log_p)
+background_log_p = np.mean(background_log_p, axis=0)
 
 likelihood_ = (data_log_p - background_log_p)
 likelihood = np.nan_to_num(likelihood_, nan=0, posinf=0, neginf=0)        

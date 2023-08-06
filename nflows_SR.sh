@@ -9,7 +9,7 @@
 #SBATCH --cpus-per-task=1         # Cores per task (>1 if multithread tasks)
 #SBATCH --gres=gpu:1              # Number of GPUs per node
 #SBATCH --mem=8000                # Real memory (RAM) required (MB)
-#SBATCH --time=03:00:00           # Total run time limit (HH:MM:SS)
+#SBATCH --time=05:00:00           # Total run time limit (HH:MM:SS)
 
 
 cd /scratch/rd804/m-anode/
@@ -25,7 +25,8 @@ n_sig=$4
 
 python scripts/nflows_SR.py --try ${try_} \
     --epochs=100 --batch_size=256 --shuffle_split \
-    --split=${SLURM_ARRAY_TASK_ID} --resample --seed ${try_} \
+    --ensemble \
+    --split=${SLURM_ARRAY_TASK_ID} --seed ${try_} \
     --wandb \
     --wandb_group ${group_name} --wandb_job_type ${job_type}_${n_sig} \
     --wandb_run_name try_${try_}_${SLURM_ARRAY_TASK_ID} \

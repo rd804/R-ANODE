@@ -247,8 +247,6 @@ def r_anode(model_S,model_B,w,optimizer,data_loader, params, device='cpu',
 
     for batch_idx, data in enumerate(data_loader):
 
-        if batch_idx == 5:
-            break
 
         data = data.to(device)
 
@@ -300,8 +298,7 @@ def anode(model,train_loader, optimizer, params, device='cpu', mode='train'):
 
 
     for batch_idx, data in enumerate(train_loader):
-        if batch_idx == 5:
-            break
+
 
         data = data.to(device)
         #params = params.to(device)
@@ -321,14 +318,18 @@ def anode(model,train_loader, optimizer, params, device='cpu', mode='train'):
     return total_loss
     
 
-def evaluate_log_prob(model, data, preprocessing_params):
+def evaluate_log_prob(model, data, preprocessing_params, transform=False):
     logit_prob = model.log_probs(data[:, 1:-1], data[:,0].reshape(-1,1))
-    log_prob = logit_prob.flatten() + torch.sum(
-    torch.log(
-        2 * (1 + torch.cosh(data[:, 1:-1] * preprocessing_params["std"] + preprocessing_params["mean"]))
-        / (preprocessing_params["std"] * (preprocessing_params["max"] - preprocessing_params["min"]))
-    ), axis=1
-) # type: ignore
+    
+    if transform:
+        log_prob = logit_prob.flatten() + torch.sum(
+        torch.log(
+            2 * (1 + torch.cosh(data[:, 1:-1] * preprocessing_params["std"] + preprocessing_params["mean"]))
+            / (preprocessing_params["std"] * (preprocessing_params["max"] - preprocessing_params["min"]))
+        ), axis=1
+    ) # type: ignore
+    else:
+        log_prob = logit_prob.flatten()
     return log_prob
 
 
