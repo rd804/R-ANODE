@@ -247,9 +247,11 @@ def r_anode(model_S,model_B,w,optimizer,data_loader, params, device='cpu',
     total_loss = 0
 
     for batch_idx, data in enumerate(data_loader):
+        if batch_idx==5:
+            break
 
 
-        data = data.to(device)
+        data = data[0].to(device)
 
         if mode == 'train':
             optimizer.zero_grad()
@@ -281,6 +283,26 @@ def r_anode(model_S,model_B,w,optimizer,data_loader, params, device='cpu',
             optimizer.step()
 
     total_loss /= len(data_loader)
+
+    if mode == 'train':
+    # set batch norm layers to eval mode
+    # what dafaq is this doing?
+        print('setting batch norm layers to eval mode')
+        has_batch_norm = False
+        for module in model_S.modules():
+            if isinstance(module, fnn.BatchNormFlow):
+                has_batch_norm = True
+                module.momentum = 0
+        # forward pass to update batch norm statistics
+        if has_batch_norm:
+            with torch.no_grad():
+            ## NOTE this is not yet fully understood but it crucial to work with BN
+                model_S(data_loader.dataset.tensors[0][:,1:-1].to(data[0].device),
+                    data_loader.dataset.tensors[0][:,0].to(data[0].device).reshape(-1,1).float())
+
+            for module in model_S.modules():
+                if isinstance(module, fnn.BatchNormFlow):
+                    module.momentum = 1
  
 
     return total_loss

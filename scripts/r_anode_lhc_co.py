@@ -40,7 +40,7 @@ parser.add_argument('--split', type=int, default=1, help='split number')
 parser.add_argument('--data_dir', type=str, default='data/lhc_co', help='data directory')
 parser.add_argument('--config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
 parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/manuel_flows/training_1', help='CR data path')
-parser.add_argument('--ensemble', action='store_true', help='if ensemble is used')
+parser.add_argument('--ensemble', action='store_true',default = True ,help='if ensemble is used')
 
 parser.add_argument('--wandb', action='store_true', help='if wandb is used' )
 parser.add_argument('--wandb_group', type=str, default='debugging_r_anode')
@@ -66,7 +66,7 @@ if args.wandb:
 # print wandb group
 
 
-CUDA = True
+CUDA = False
 device = torch.device(args.gpu if CUDA else "cpu")
 
 SR_data, CR_data , true_w, sigma = resample_split(args.data_dir, n_sig = args.n_sig, resample_seed = args.seed,resample = args.resample)
@@ -102,9 +102,8 @@ _x_test = np.load(f'{args.data_dir}/x_test.npy')
 x_test = preprocess_params_transform(_x_test, pre_parameters)
 
 
-
-traintensor = torch.from_numpy(data_train.astype('float32'))
-valtensor = torch.from_numpy(data_val.astype('float32'))
+traintensor = torch.from_numpy(data_train.astype('float32')).to(device)
+valtensor = torch.from_numpy(data_val.astype('float32')).to(device)
 testtensor = torch.from_numpy(x_test.astype('float32')).to(device)
 
 print('X_train shape', traintensor.shape)
@@ -114,15 +113,19 @@ print('X_test shape', testtensor.shape)
 for key in pre_parameters.keys():
     pre_parameters[key] = torch.from_numpy(pre_parameters[key].astype('float32')).to(device)
 
+train_tensor = torch.utils.data.TensorDataset(traintensor)
+val_tensor = torch.utils.data.TensorDataset(valtensor)
+test_tensor = torch.utils.data.TensorDataset(testtensor)
 
 
 # Use the standard pytorch DataLoader
 batch_size = args.batch_size
-trainloader = torch.utils.data.DataLoader(traintensor, batch_size=batch_size, shuffle=True)
+trainloader = torch.utils.data.DataLoader(train_tensor, batch_size=batch_size, shuffle=True)
 
 test_batch_size=batch_size*5
-valloader = torch.utils.data.DataLoader(valtensor, batch_size=test_batch_size, shuffle=False)
-testloader = torch.utils.data.DataLoader(testtensor, batch_size=test_batch_size, shuffle=False)
+valloader = torch.utils.data.DataLoader(val_tensor, batch_size=test_batch_size, shuffle=False)
+testloader = torch.utils.data.DataLoader(test_tensor, batch_size=test_batch_size, shuffle=False)
+
 
 
 model_S = DensityEstimator(args.config_file, eval_mode=False, device=device)
@@ -227,12 +230,24 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
 
     model_S.model.eval()
 
-    x_samples = generate_transformed_samples(model_S.model, testtensor[testtensor[:,-1]==1], pre_parameters, device=device).cpu().detach().numpy()
+    train_data = inverse_transform(traintensor, pre_parameters).cpu().detach().numpy()
+    val_data = inverse_transform(valtensor, pre_parameters).cpu().detach().numpy()
+
+
+
+    x_samples_train = generate_transformed_samples(model_S.model, traintensor, pre_parameters, device=device).cpu().detach().numpy()
+    x_samples_val = generate_transformed_samples(model_S.model, valtensor, pre_parameters, device=device).cpu().detach().numpy()
+
+    x_samples = np.vstack((x_samples_train, x_samples_val))
+    all_data = np.vstack((train_data, val_data))
+
+    print('x_samples shape', x_samples.shape)
+    print('all_data shape', all_data.shape)
 
     for i in range(5):
         figure=plt.figure()
         #if dims > 1:
-        plt.hist(test_data[:,i][label_test==1],bins=100, density=True, label=f'data for {i}', histtype='step')
+        plt.hist(all_data[:,i][all_data[:,-1]==1],bins=100, density=True, label=f'data for {i}', histtype='step')
         plt.hist(x_samples[:,i],bins=100, density=True, label=f'nflow sample for {i}', histtype='step')
         plt.legend(loc='upper right')
         plt.title(f'Nflow vs S for {i}')
@@ -243,13 +258,14 @@ if ~np.isnan(train_loss) or ~np.isnan(val_loss):
         plt.close()
 
     model_B.model.eval()
-    x_samples = generate_transformed_samples(model_B.model, testtensor[testtensor[:,-1]==0], pre_parameters, device=device).cpu().detach().numpy()
+    
+    x_samples = generate_transformed_samples(model_B.model, valtensor, pre_parameters, device=device).cpu().detach().numpy()
 
 
     for i in range(5):
         figure=plt.figure()
         #if dims > 1:
-        plt.hist(test_data[:,i][label_test==0],bins=100, density=True, label=f'data for {i}', histtype='step')
+        plt.hist(val_data[:,i][val_data[:,-1]==0],bins=100, density=True, label=f'data for {i}', histtype='step')
         plt.hist(x_samples[:,i],bins=100, density=True, label=f'nflow sample for {i}', histtype='step')
         plt.legend(loc='upper right')
         plt.title(f'Nflow vs B for {i}')
