@@ -22,7 +22,7 @@ import sys
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_sig',type=int , default=1000)
 parser.add_argument('--try_', type=int, default=0)
-parser.add_argument('--epochs', type=int, default=2)
+parser.add_argument('--epochs', type=int, default=3)
 parser.add_argument('--batch_size', type=int, default=256)
 
 parser.add_argument('--resample', action='store_true', help='if data is to resampled')
@@ -32,11 +32,11 @@ parser.add_argument('--split', type=int, default=1, help='split number')
 parser.add_argument('--data_dir', type=str, default='data/lhc_co', help='data directory')
 parser.add_argument('--config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
 parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/manuel_flows/training_1', help='CR data path')
-parser.add_argument('--ensemble', action='store_true', help='if ensemble is used')
+parser.add_argument('--ensemble', action='store_true', default=True ,help='if ensemble is used')
 
 
 parser.add_argument('--wandb', action='store_true', help='if wandb is used')
-parser.add_argument('--wandb_group', type=str, default='debugging_anode')
+parser.add_argument('--wandb_group', type=str, default='debugging_anode_SR')
 parser.add_argument('--wandb_job_type', type=str, default='SR')
 parser.add_argument('--wandb_run_name', type=str, default='try_')
 
@@ -97,9 +97,8 @@ _x_test = np.load(f'{args.data_dir}/x_test.npy')
 x_test = preprocess_params_transform(_x_test, pre_parameters)
 
 
-
-traintensor = torch.from_numpy(data_train.astype('float32'))
-valtensor = torch.from_numpy(data_val.astype('float32'))
+traintensor = torch.from_numpy(data_train.astype('float32')).to(device)
+valtensor = torch.from_numpy(data_val.astype('float32')).to(device)
 testtensor = torch.from_numpy(x_test.astype('float32')).to(device)
 
 print('X_train shape', traintensor.shape)
@@ -109,16 +108,19 @@ print('X_test shape', testtensor.shape)
 for key in pre_parameters.keys():
     pre_parameters[key] = torch.from_numpy(pre_parameters[key].astype('float32')).to(device)
 
-
+train_tensor = torch.utils.data.TensorDataset(traintensor)
+val_tensor = torch.utils.data.TensorDataset(valtensor)
+test_tensor = torch.utils.data.TensorDataset(testtensor)
 
 
 # Use the standard pytorch DataLoader
 batch_size = args.batch_size
-trainloader = torch.utils.data.DataLoader(traintensor, batch_size=batch_size, shuffle=True)
+trainloader = torch.utils.data.DataLoader(train_tensor, batch_size=batch_size, shuffle=True)
 
 test_batch_size=batch_size*5
-valloader = torch.utils.data.DataLoader(valtensor, batch_size=test_batch_size, shuffle=False)
-testloader = torch.utils.data.DataLoader(testtensor, batch_size=test_batch_size, shuffle=False)
+valloader = torch.utils.data.DataLoader(val_tensor, batch_size=test_batch_size, shuffle=False)
+testloader = torch.utils.data.DataLoader(test_tensor, batch_size=test_batch_size, shuffle=False)
+
 
 
 
@@ -187,16 +189,22 @@ model.model.eval()
 test_data = inverse_transform(testtensor, pre_parameters).cpu().detach().numpy()
 label_test = test_data[:,-1]
 
+train_data = inverse_transform(traintensor, pre_parameters).cpu().detach().numpy()
+val_data = inverse_transform(valtensor, pre_parameters).cpu().detach().numpy()
+
+
 model.model.eval()
 
-x_samples = generate_transformed_samples(model.model, testtensor, pre_parameters, device=device).cpu().detach().numpy()
+x_samples_train = generate_transformed_samples(model.model, traintensor, pre_parameters, device=device).cpu().detach().numpy()
+x_samples_val = generate_transformed_samples(model.model, valtensor, pre_parameters, device=device).cpu().detach().numpy()
 
-
+x_samples = np.vstack((x_samples_train, x_samples_val))
+all_data = np.vstack((train_data, val_data))
 
 for i in range(5):
     figure=plt.figure()
     #if dims > 1:
-    plt.hist(test_data[:,i],bins=100, density=True, label=f'data for {i}', histtype='step')
+    plt.hist(all_data[:,i],bins=100, density=True, label=f'data for {i}', histtype='step')
     plt.hist(x_samples[:,i],bins=100, density=True, label=f'nflow sample for {i}', histtype='step')
     plt.title(f'NFlow vs data for {i}')
     plt.legend(loc='upper right')
