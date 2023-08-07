@@ -18,10 +18,16 @@ cd /scratch/rd804/m-anode/
 source ~/.bashrc
 conda activate manode
 
-try_=$1
-group_name=$2
-job_type=$3
-n_sig=$4
+#try_=$1
+#group_name=$2
+#job_type=$3
+#n_sig=$4
+try_='1'
+#group_name='test'
+group_name='nflows_lhc_co'
+job_type='SR_bn_fixed'
+n_sig=1000
+
 
 python scripts/nflows_SR.py --try ${try_} \
     --epochs=100 --batch_size=256 --shuffle_split \
