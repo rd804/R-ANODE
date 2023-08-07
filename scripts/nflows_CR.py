@@ -47,7 +47,7 @@ if os.path.exists(f'{save_path}best_val_loss_scores.npy'):
     print(f'already done {args.wandb_run_name}')
     sys.exit()
 
-CUDA = True
+CUDA = False
 device = torch.device("cuda:0" if CUDA else "cpu")
 
 job_name = args.wandb_job_type
@@ -107,16 +107,18 @@ print('X_test shape', testtensor.shape)
 for key in pre_parameters.keys():
     pre_parameters[key] = torch.from_numpy(pre_parameters[key].astype('float32')).to(device)
 
-
+train_tensor = torch.utils.data.TensorDataset(traintensor)
+val_tensor = torch.utils.data.TensorDataset(valtensor)
+test_tensor = torch.utils.data.TensorDataset(testtensor)
 
 
 # Use the standard pytorch DataLoader
 batch_size = args.batch_size
-trainloader = torch.utils.data.DataLoader(traintensor, batch_size=batch_size, shuffle=True)
+trainloader = torch.utils.data.DataLoader(train_tensor, batch_size=batch_size, shuffle=True)
 
 test_batch_size=batch_size*5
-valloader = torch.utils.data.DataLoader(valtensor, batch_size=test_batch_size, shuffle=False)
-testloader = torch.utils.data.DataLoader(testtensor, batch_size=test_batch_size, shuffle=False)
+valloader = torch.utils.data.DataLoader(val_tensor, batch_size=test_batch_size, shuffle=False)
+testloader = torch.utils.data.DataLoader(test_tensor, batch_size=test_batch_size, shuffle=False)
 
 
 
