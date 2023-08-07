@@ -299,9 +299,7 @@ def anode(model,train_loader, optimizer, params, device='cpu', mode='train'):
 
 
     for batch_idx, data in enumerate(train_loader):
-        print('batch_idx: ', batch_idx)
-        if batch_idx == 5:
-            break
+
 
         data = data[0].to(device)
         #params = params.to(device)

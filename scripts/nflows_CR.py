@@ -47,7 +47,7 @@ if os.path.exists(f'{save_path}best_val_loss_scores.npy'):
     print(f'already done {args.wandb_run_name}')
     sys.exit()
 
-CUDA = False
+CUDA = True
 device = torch.device("cuda:0" if CUDA else "cpu")
 
 job_name = args.wandb_job_type
@@ -65,7 +65,7 @@ print(device)
 
 SR_data, CR_data , true_w, sigma = resample_split(args.data_dir, n_sig = args.n_sig, resample_seed = args.seed,resample = args.resample)
 
-print('x_train shape', SR_data.shape)
+print('x_train shape', CR_data.shape)
 print('true_w', true_w)
 print('sigma', sigma)
 

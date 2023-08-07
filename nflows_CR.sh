@@ -23,12 +23,12 @@ conda activate manode
 #job_type=$3
 #n_sig=$4
 try_='1'
-group_name='test'
-job_type='CR_verify'
+group_name='nflows_lhc_co'
+job_type='CR_bn_fixed'
 n_sig=1000
 
 python scripts/nflows_CR.py --try ${try_} \
-    --epochs=2 --batch_size=256 --shuffle_split \
+    --epochs=100 --batch_size=256 --shuffle_split \
     --split=${SLURM_ARRAY_TASK_ID} --seed ${try_} \
     --wandb \
     --wandb_group ${group_name} --wandb_job_type ${job_type}_${n_sig} \
