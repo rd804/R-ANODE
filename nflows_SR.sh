@@ -25,7 +25,7 @@ conda activate manode
 try_='1'
 #group_name='test'
 group_name='nflows_lhc_co'
-job_type='SR_bn_fixed'
+job_type='SR_my_model'
 n_sig=1000
 
 

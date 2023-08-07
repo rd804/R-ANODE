@@ -31,7 +31,7 @@ parser.add_argument('--shuffle_split', action='store_true', help='if shuffle spl
 parser.add_argument('--split', type=int, default=1, help='split number')
 parser.add_argument('--data_dir', type=str, default='data/lhc_co', help='data directory')
 parser.add_argument('--config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
-parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/manuel_flows/training_1', help='CR data path')
+parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/CR_bn_fixed_1000/try_1_0', help='CR data path')
 parser.add_argument('--ensemble', action='store_true', default=True ,help='if ensemble is used')
 
 
@@ -240,17 +240,19 @@ print('data_p', data_log_p[:10])
 
 # load CR model
 
-val_losses = np.load(f'{args.CR_path}/my_ANODE_model_val_losses.npy')
+#val_losses = np.load(f'{args.CR_path}/my_ANODE_model_val_losses.npy')
+val_losses = np.load(f'{args.CR_path}/valloss_list.npy')
 
 if not args.ensemble:
     best_epoch = np.argsort(val_losses)[0]
 else:
     best_epoch = np.argsort(val_losses)[0:10]
 
-
+model_B = DensityEstimator(args.config_file, eval_mode=True, device=device)
 background_log_p = []
 for epoch in best_epoch:
-    model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/my_ANODE_model_epoch_{epoch}.par", device=device)
+  #  model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/my_ANODE_model_epoch_{epoch}.par", device=device)
+    model_B.model.load_state_dict(torch.load(f'{args.CR_path}/model_CR_{epoch}.pt'))
 
     model_B.model.eval()
     with torch.no_grad():
