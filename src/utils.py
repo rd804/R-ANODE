@@ -372,3 +372,54 @@ def scaled_sigmoid(x, a):
     return 1/(1+torch.exp(- a * x))
 
 
+
+def jet_centering(data):
+
+    E = data[...,0]
+    px = data[...,1]
+    py = data[...,2]
+    pz = data[...,3]
+
+    pt = np.sqrt(px**2 + py**2)
+    eta = 0.5 * np.log((E + pz)/(E - pz))
+    phi = np.arctan2(py, px)
+    m = np.sqrt(E**2 - px**2 - py**2 - pz**2)
+
+    jet_ptetaphim = np.stack([pt, eta, phi, m], axis=-1)
+
+
+    total_E = E.sum(axis=1)
+    total_px = px.sum(axis=1)
+    total_py = py.sum(axis=1)
+    total_pz = pz.sum(axis=1)
+
+    jet_vector = np.stack([total_E, total_px, total_py, total_pz], axis=-1)
+
+    total_eta = 0.5 * np.log((total_E + total_pz)/(total_E - total_pz))
+    total_phi = np.arctan2(total_py, total_px)
+    total_m = np.sqrt(total_E**2 - total_px**2 - total_py**2 - total_pz**2)
+    total_pt = np.sqrt(total_px**2 + total_py**2)
+
+    print(total_pt.shape)
+
+    # centering
+    jet_ptetaphim[...,0] = jet_ptetaphim[...,0]/total_pt
+    jet_ptetaphim[...,1] = jet_ptetaphim[...,1] - total_eta
+    jet_ptetaphim[...,2] = jet_ptetaphim[...,2] - total_phi
+    jet_ptetaphim[...,3] = jet_ptetaphim[...,3]/total_m
+
+
+    # convert back to eta pt phi m to E px py pz
+    px = jet_ptetaphim[...,0] * np.cos(jet_ptetaphim[...,2])
+    py = jet_ptetaphim[...,0] * np.sin(jet_ptetaphim[...,2])
+
+    mt = np.sqrt(jet_ptetaphim[...,0]**2 + jet_ptetaphim[...,3]**2)
+    pz = mt * np.sinh(jet_ptetaphim[...,1])
+    E = mt * np.cosh(jet_ptetaphim[...,1])
+
+    jet_constituent_vector = np.stack([E, px, py, pz], axis=-1)
+
+    
+
+
+
