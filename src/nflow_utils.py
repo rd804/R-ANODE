@@ -15,7 +15,7 @@ import src.flows as fnn
 
 
 
-def r_anode(model_S,model_B,w,optimizer,data_loader, params, device='cpu', 
+def r_anode(model_S,model_B,w,optimizer, scheduler, data_loader, params, device='cpu', 
                  mode='train', data_loss_expr = 'true_likelihood'):
     
     n_nans = 0
@@ -43,9 +43,9 @@ def r_anode(model_S,model_B,w,optimizer,data_loader, params, device='cpu',
         if data_loss_expr == 'true_likelihood':
 
             model_S_log_prob = evaluate_log_prob(model_S, data_SR, params_SR,
-                                                 transform=True)
+                                                 transform=False)
             model_B_log_prob = evaluate_log_prob(model_B, data_CR, params_CR,
-                                                 transform=True)
+                                                 transform=False)
             if batch_idx==0:
                 assert model_S_log_prob.shape == model_B_log_prob.shape
                 print(f'value of w: {w}')    
@@ -72,6 +72,7 @@ def r_anode(model_S,model_B,w,optimizer,data_loader, params, device='cpu',
         if mode == 'train':
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
     total_loss /= len(data_loader)
 
