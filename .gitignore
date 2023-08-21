@@ -2,8 +2,11 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+/models_SR
 # C extensions
+model_CR
+model_CR_1
+models_SR_1
 *.so
 slurm-*
 # Distribution / packaging
@@ -182,3 +185,7 @@ anode_max_SIC.png
 anode_SIC_001.png
 anode_SIC_01.png
 .vscode/settings.json
+ANODE_sigonly_working_copy.ipynb
+ANODE_sigonly_working.ipynb
+ANODE_sigonly_working.out
+ANODE_sigonly_working.py
