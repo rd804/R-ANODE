@@ -17,21 +17,26 @@ cd /scratch/rd804/m-anode/
 source ~/.bashrc
 conda activate manode
 
+#try_='1'
+#group_name='nflows_lhc_co'
+#group_name='test'
+#job_type='r_anode_model_S'
+#n_sig=1000
+
 try_=$1
 group_name=$2
 job_type=$3
-sig=$4
+n_sig=$4
 
 
-
-python scripts/r_anode_lhc_co.py --n_sig=${sig} \
+python scripts/r_anode_lhc_co.py --n_sig=${n_sig} \
         --mini_batch=256 --mode_background='freeze' --epochs=100 \
-        --shuffle_split \
+        --shuffle_split --resample \
         --split=${SLURM_ARRAY_TASK_ID}   \
         --seed=${try_} \
         --wandb \
         --wandb_group=${group_name} \
-        --wandb_job_type=${job_type}'_'${sig} \
+        --wandb_job_type=${job_type}'_'${n_sig} \
         --wandb_run_name='try_'${try_}'_'${SLURM_ARRAY_TASK_ID} \
         --data_loss_expr='true_likelihood'
 

@@ -2,9 +2,9 @@
 
 all_sig=1
 arr=1	
-group="nflows_lhc_co"
+group="nflows_lhc_co_nsig_scan"
 #group="test"
-job_type="r_anode_loss_untransformed"
+job_type="r_anode"
 
 source ~/.bashrc
 conda activate manode
@@ -15,14 +15,14 @@ do
     all_sig=()
 
    # for sig in 1
-    for n_sig in 1000
+    for n_sig in 1000 750 500 250 100 75 50
    # for sig in 0.4 0.5 0.6 0.7
     #for sig in 5
     #for sig in 0.1 0.2 0.8 0.9 5
     do
         echo "sigma = ${n_sig}"
         arr=()
-        for j in 1
+        for j in {0..9..1}
         do
             for split in {0..19..1}
             do

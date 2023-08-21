@@ -26,9 +26,9 @@ parser.add_argument('--epochs', type=int, default=2)
 parser.add_argument('--batch_size', type=int, default=256)
 
 parser.add_argument('--resample', action='store_true', help='if data is to resampled')
-parser.add_argument('--seed', type=int, default=22, help='seed')
+parser.add_argument('--seed', type=int, default=1, help='seed')
 parser.add_argument('--shuffle_split', action='store_true', help='if shuffle split is used')
-parser.add_argument('--split', type=int, default=1, help='split number')
+parser.add_argument('--split', type=int, default=0, help='split number')
 parser.add_argument('--data_dir', type=str, default='data/lhc_co', help='data directory')
 parser.add_argument('--config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
 
@@ -46,6 +46,10 @@ save_path = 'results/'+args.wandb_group+'/'\
 if os.path.exists(f'{save_path}best_val_loss_scores.npy'):
     print(f'already done {args.wandb_run_name}')
     sys.exit()
+
+
+if not os.path.exists(save_path):
+    os.makedirs(save_path)
 
 CUDA = True
 device = torch.device("cuda:0" if CUDA else "cpu")
@@ -74,7 +78,11 @@ if args.wandb:
 
 
 pre_parameters = preprocess_params_fit(CR_data)
-x_train = preprocess_params_transform(CR_data, pre_parameters) 
+x_train = preprocess_params_transform(CR_data, pre_parameters)
+
+# save pre_parameters
+with open(save_path+'pre_parameters.pkl', 'wb') as f:
+    pickle.dump(pre_parameters, f)
 
 
 if not args.shuffle_split:    
@@ -124,12 +132,7 @@ testloader = torch.utils.data.DataLoader(test_tensor, batch_size=test_batch_size
 
 # # %%
 # define savepath
-save_path = 'results/'+args.wandb_group+'/'\
-            +job_name+'/'+args.wandb_run_name+'/'
 
-
-if not os.path.exists(save_path):
-    os.makedirs(save_path)
     
 
 trainloss_list=[]

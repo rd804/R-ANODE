@@ -7,8 +7,8 @@
 #SBATCH --ntasks=1                # Total # of tasks across all nodes
 #SBATCH --cpus-per-task=1         # Cores per task (>1 if multithread tasks)
 #SBATCH --gres=gpu:1              # Number of GPUs per node
-#SBATCH --mem=3000                # Real memory (RAM) required (MB)
-#SBATCH --time=02:00:00           # Total run time limit (HH:MM:SS)
+#SBATCH --mem=4000                # Real memory (RAM) required (MB)
+#SBATCH --time=05:00:00           # Total run time limit (HH:MM:SS)
 
 
 cd /scratch/rd804/m-anode/
@@ -16,9 +16,7 @@ cd /scratch/rd804/m-anode/
 source ~/.bashrc
 conda activate manode
 
-python scripts/m_anode_compile.py --scan_set='m_2d_bw_true_shuffle_split_3' \
-    --mode_background='true' --ensemble --anode_set='SR_shuffle_split_3' \
-    --gaussian_dim=2 \
+python scripts/m_anode_compile.py --ensemble --wandb \
 
         
 

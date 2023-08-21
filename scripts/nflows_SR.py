@@ -54,6 +54,9 @@ device = torch.device("cuda:0" if CUDA else "cpu")
 
 job_name = args.wandb_job_type
 
+if not os.path.exists(save_path):
+    os.makedirs(save_path)
+
 # initialize wandb for logging
 if args.wandb:
     wandb.init(project="r_anode", config=args,
@@ -78,6 +81,8 @@ if args.wandb:
 pre_parameters = preprocess_params_fit(SR_data)
 x_train = preprocess_params_transform(SR_data, pre_parameters) 
 
+with open(f'{save_path}pre_parameters.pkl', 'wb') as f:
+    pickle.dump(pre_parameters, f)
 
 if not args.shuffle_split:    
     data_train, data_val = train_test_split(x_train, test_size=0.1, random_state=args.seed)
@@ -94,23 +99,24 @@ else:
 
 
 _x_test = np.load(f'{args.data_dir}/x_test.npy')
-x_test = preprocess_params_transform(_x_test, pre_parameters)
+#x_test = preprocess_params_transform(_x_test, pre_parameters)
 
 
 traintensor = torch.from_numpy(data_train.astype('float32')).to(device)
 valtensor = torch.from_numpy(data_val.astype('float32')).to(device)
-testtensor = torch.from_numpy(x_test.astype('float32')).to(device)
+#testtensor = torch.from_numpy(x_test.astype('float32')).to(device)
 
 print('X_train shape', traintensor.shape)
 print('X_val shape', valtensor.shape)
-print('X_test shape', testtensor.shape)
+#print('X_test shape', testtensor.shape)
+pre_parameters_SR = pre_parameters.copy()
 
 for key in pre_parameters.keys():
     pre_parameters[key] = torch.from_numpy(pre_parameters[key].astype('float32')).to(device)
 
 train_tensor = torch.utils.data.TensorDataset(traintensor)
 val_tensor = torch.utils.data.TensorDataset(valtensor)
-test_tensor = torch.utils.data.TensorDataset(testtensor)
+#test_tensor = torch.utils.data.TensorDataset(testtensor)
 
 
 # Use the standard pytorch DataLoader
@@ -119,7 +125,7 @@ trainloader = torch.utils.data.DataLoader(train_tensor, batch_size=batch_size, s
 
 test_batch_size=batch_size*5
 valloader = torch.utils.data.DataLoader(val_tensor, batch_size=test_batch_size, shuffle=False)
-testloader = torch.utils.data.DataLoader(test_tensor, batch_size=test_batch_size, shuffle=False)
+#testloader = torch.utils.data.DataLoader(test_tensor, batch_size=test_batch_size, shuffle=False)
 
 
 
@@ -186,8 +192,8 @@ torch.save(model.model.state_dict(), save_path+'model_SR_best.pt')
 # check density estimation
 model.model.eval()
 
-test_data = inverse_transform(testtensor, pre_parameters).cpu().detach().numpy()
-label_test = test_data[:,-1]
+#test_data = inverse_transform(testtensor, pre_parameters).cpu().detach().numpy()
+#label_test = test_data[:,-1]
 
 train_data = inverse_transform(traintensor, pre_parameters).cpu().detach().numpy()
 val_data = inverse_transform(valtensor, pre_parameters).cpu().detach().numpy()
@@ -214,7 +220,35 @@ for i in range(5):
 
     plt.close()
 
+#################################
+##################################
+##################################
 # compute scores
+
+
+
+pre_parameters_CR = pickle.load(open(f'{args.CR_path}/pre_parameters.pkl', 'rb'))
+
+_, mask_SR = logit_transform(_x_test[:,1:-1], pre_parameters_SR['min'],
+                             pre_parameters_SR['max'])
+_, mask_CR = logit_transform(_x_test[:,1:-1], pre_parameters_CR['min'],
+                             pre_parameters_CR['max'])
+
+# common set of events to evaluate on
+mask = mask_SR & mask_CR
+x_test = _x_test[mask]
+label_test = x_test[:,-1]
+
+x_test_SR = preprocess_params_transform(x_test, pre_parameters_SR)
+x_test_CR = preprocess_params_transform(x_test, pre_parameters_CR)
+
+
+
+
+test_tensor_CR = torch.from_numpy(x_test_CR.astype('float32')).to(device)
+test_tensor_SR = torch.from_numpy(x_test_SR.astype('float32')).to(device)
+
+
 
 if not args.ensemble:
     best_epoch = np.argsort(valloss_list)[0]
@@ -226,11 +260,14 @@ for epoch in best_epoch:
     model.model.load_state_dict(torch.load(save_path+'model_SR_'+str(epoch)+'.pt'))
     model.model.eval()
     with torch.no_grad():
-        log_p = evaluate_log_prob(model.model, testtensor, pre_parameters).cpu().detach().numpy()
+        log_p = evaluate_log_prob(model.model, test_tensor_SR, pre_parameters_SR).cpu().detach().numpy()
         data_log_p.append(log_p)
 
+# compute the arithmetic mean of the probabilities
 data_log_p = np.array(data_log_p)
-data_log_p = np.mean(data_log_p, axis=0)
+data_exp_p = np.exp(data_log_p)
+data_log_p = np.mean(data_exp_p, axis=0)
+data_log_p = np.log(data_log_p + 1e-32)
    # data_p = np.exp(log_p)
 
 print('data_p', data_log_p.shape)
@@ -256,11 +293,13 @@ for epoch in best_epoch:
 
     model_B.model.eval()
     with torch.no_grad():
-        log_p = evaluate_log_prob(model_B.model, testtensor, pre_parameters).cpu().detach().numpy()
+        log_p = evaluate_log_prob(model_B.model, test_tensor_CR, pre_parameters_CR).cpu().detach().numpy()
         background_log_p.append(log_p)
 
 background_log_p = np.array(background_log_p)
-background_log_p = np.mean(background_log_p, axis=0)
+background_exp_p = np.exp(background_log_p)
+background_log_p = np.mean(background_exp_p, axis=0)
+background_log_p = np.log(background_log_p+1e-32)
 
 likelihood_ = (data_log_p - background_log_p)
 likelihood = np.nan_to_num(likelihood_, nan=0, posinf=0, neginf=0)        
