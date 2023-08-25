@@ -41,14 +41,16 @@ def r_anode(model_S,model_B,w,optimizer, scheduler, data_loader, params, device=
             optimizer.zero_grad()
 
         if data_loss_expr == 'true_likelihood':
-
-            model_S_log_prob = evaluate_log_prob(model_S, data_SR, params_SR,
-                                                 transform=False)
+         #   model_S_log_prob = model_S.log_prob(data_SR[:,1:-1])
+            model_S_log_prob = model_S.log_prob(data_SR[:,1:-1],context=data_SR[:,0].reshape(-1,1))
+       #     model_S_log_prob = evaluate_log_prob(model_S, data_SR, params_SR,
+        #                                         transform=False)
             model_B_log_prob = evaluate_log_prob(model_B, data_CR, params_CR,
                                                  transform=False)
             if batch_idx==0:
                 assert model_S_log_prob.shape == model_B_log_prob.shape
                 print(f'value of w: {w}')    
+            
             
             
             data_p = w * torch.exp(model_S_log_prob) + (1-w) * torch.exp(model_B_log_prob)
@@ -76,25 +78,25 @@ def r_anode(model_S,model_B,w,optimizer, scheduler, data_loader, params, device=
 
     total_loss /= len(data_loader)
 
-    if mode == 'train':
+   # if mode == 'train':
     # set batch norm layers to eval mode
     # what dafaq is this doing?
-        print('setting batch norm layers to eval mode')
-        has_batch_norm = False
-        for module in model_S.modules():
-            if isinstance(module, fnn.BatchNormFlow):
-                has_batch_norm = True
-                module.momentum = 0
+  #      print('setting batch norm layers to eval mode')
+   #     has_batch_norm = False
+   #     for module in model_S.modules():
+    #        if isinstance(module, fnn.BatchNormFlow):
+     #           has_batch_norm = True
+       #         module.momentum = 0
         # forward pass to update batch norm statistics
-        if has_batch_norm:
-            with torch.no_grad():
+      #  if has_batch_norm:
+       #     with torch.no_grad():
             ## NOTE this is not yet fully understood but it crucial to work with BN
-                model_S(data_loader.dataset.tensors[1][:,1:-1].to(data[0].device),
-                    data_loader.dataset.tensors[1][:,0].to(data[0].device).reshape(-1,1).float())
+        #        model_S(data_loader.dataset.tensors[1][:,1:-1].to(data[0].device),
+         #           data_loader.dataset.tensors[1][:,0].to(data[0].device).reshape(-1,1).float())
 
-            for module in model_S.modules():
-                if isinstance(module, fnn.BatchNormFlow):
-                    module.momentum = 1
+          #  for module in model_S.modules():
+           #     if isinstance(module, fnn.BatchNormFlow):
+            #        module.momentum = 1
     if n_nans > 0:
         print('---------------------------------------------------')
         print('---------------------------------------------------')
@@ -102,6 +104,10 @@ def r_anode(model_S,model_B,w,optimizer, scheduler, data_loader, params, device=
         print(f'WARNING: {n_nans} nans in data_loss in mode {mode}')
         print('---------------------------------------------------')
         print('---------------------------------------------------')
+        print(f'max model_S_log_prob: {torch.max(model_S_log_prob)}')
+        print(f'min model_S_log_prob: {torch.min(model_S_log_prob)}')
+        print(f'max model_B_log_prob: {torch.max(model_B_log_prob)}')
+        print(f'min model_B_log_prob: {torch.min(model_B_log_prob)}')
 
 
     return total_loss
@@ -174,5 +180,29 @@ def evaluate_log_prob(model, data, preprocessing_params, transform=False):
         log_prob = logit_prob.flatten()
     return log_prob
 
+def flows_for_gaussian(gaussian_dim = 2, num_transforms = 2, num_blocks = 3, 
+                       hidden_features = 32, device = 'cpu'):
+
+    base_dist = nflows.distributions.normal.StandardNormal(shape=[gaussian_dim])
+
+    list_transforms = []
+    for _ in range(num_transforms):
+        list_transforms.append(
+            nflows.transforms.permutations.RandomPermutation(gaussian_dim)
+        )
+        list_transforms.append(
+            nflows.transforms.autoregressive.MaskedAffineAutoregressiveTransform(
+                features=gaussian_dim, 
+                hidden_features=hidden_features,
+                num_blocks=num_blocks,
+                activation=torch.nn.functional.relu
+            )
+        )
+
+    transform = nflows.transforms.base.CompositeTransform(list_transforms)
+
+    flow = nflows.flows.base.Flow(transform, base_dist).to(device)
+
+    return flow
 
 

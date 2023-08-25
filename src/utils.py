@@ -62,16 +62,20 @@ def inverse_transform(data, params):
 
 
 
-def generate_transformed_samples(model, data, preprocessing_params, device):
+def generate_transformed_samples(model, data, preprocessing_params, device, number=10000):
 
     mass_test = data[:,0].reshape(-1,1).type(torch.FloatTensor).to(device)
     with torch.no_grad():
-        x_samples = model.sample(len(mass_test), cond_inputs=mass_test)
-   
+       # x_samples = model.sample(len(mass_test), cond_inputs=mass_test)
+        x_samples = model.sample(len(mass_test), mass_test, )
+
+      #  x_samples = model.sample(10000, mass_test[0:10000])
     phyiscal_samples = inverse_standardize(x_samples, preprocessing_params["mean"], preprocessing_params["std"])
     phyiscal_samples = inverse_logit_transform(phyiscal_samples, preprocessing_params["min"], preprocessing_params["max"])
-
-    phyiscal_samples = torch.hstack([data[:, 0:1], phyiscal_samples])
+    print(x_samples.shape)
+    print(phyiscal_samples.shape)
+   # print()
+   # phyiscal_samples = torch.hstack([data[:, 0:1], phyiscal_samples])
 
     return phyiscal_samples
 
