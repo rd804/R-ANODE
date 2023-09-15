@@ -16,7 +16,7 @@ cd /scratch/rd804/m-anode/
 source ~/.bashrc
 conda activate manode
 
-python scripts/m_anode_compile.py --ensemble --wandb \
+python scripts/m_anode_compile.py --ensemble --wandb --cathode \
 
         
 

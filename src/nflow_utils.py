@@ -15,7 +15,7 @@ import src.flows as fnn
 from nflows.flows.base import Flow
 from nflows.distributions.normal import ConditionalDiagonalNormal, StandardNormal
 from nflows.transforms.base import CompositeTransform
-from nflows.transforms.autoregressive import MaskedAffineAutoregressiveTransform
+from nflows.transforms.autoregressive import *
 from nflows.transforms.permutations import ReversePermutation, RandomPermutation
 # import bactchnorm
 from nflows.transforms.normalization import BatchNorm
@@ -25,7 +25,7 @@ from nflows.transforms.made import MADE
 
 
 
-def r_anode(model_S,model_B,w,optimizer, scheduler, data_loader, params, device='cpu', 
+def r_anode(model_S,model_B,w,optimizer, data_loader, params,scheduler=False ,device='cpu', 
                  mode='train', data_loss_expr = 'true_likelihood'):
     
     n_nans = 0
@@ -45,7 +45,9 @@ def r_anode(model_S,model_B,w,optimizer, scheduler, data_loader, params, device=
     for batch_idx, data in enumerate(data_loader):
 
         data_SR = data[0].to(device)
-        data_CR = data[1].to(device)
+        #data_CR = data[1].to(device)
+        model_B_log_prob = data[1].to(device).flatten()
+
 
         if mode == 'train':
             optimizer.zero_grad()
@@ -55,8 +57,8 @@ def r_anode(model_S,model_B,w,optimizer, scheduler, data_loader, params, device=
             model_S_log_prob = model_S.log_prob(data_SR[:,1:-1],context=data_SR[:,0].reshape(-1,1))
        #     model_S_log_prob = evaluate_log_prob(model_S, data_SR, params_SR,
         #                                         transform=False)
-            model_B_log_prob = evaluate_log_prob(model_B, data_CR, params_CR,
-                                                 transform=False)
+           # model_B_log_prob = evaluate_log_prob(model_B, data_CR, params_CR,
+            #                                     transform=False)
             if batch_idx==0:
                 assert model_S_log_prob.shape == model_B_log_prob.shape
                 print(f'value of w: {w}')    
@@ -84,7 +86,8 @@ def r_anode(model_S,model_B,w,optimizer, scheduler, data_loader, params, device=
         if mode == 'train':
             loss.backward()
             optimizer.step()
-            scheduler.step()
+            if scheduler:
+                scheduler.step()
 
     total_loss /= len(data_loader)
 
@@ -236,12 +239,47 @@ def flows_model(num_layers = 8, num_features=4, num_blocks = 2,
         transforms.append(BatchNorm(features=num_features))
         transforms.append(RandomPermutation(features=num_features))
 
+        # transform.append(MaskedPiecewiseRationalQuadraticAutoregressiveTransform(features=num_features,))
+
     transform = CompositeTransform(transforms)
 
     model_S = Flow(transform, base_dist).to(device)
 
     return model_S
 
+def flows_model_RQS(num_layers = 6, num_features=4, num_blocks = 2, 
+                hidden_features = 64, device = 'cpu',
+                contex_features = 1, random_mask = True, 
+                use_batch_norm = True, dropout_probability = 0.0):
+    
+    flow_params_rec_energy = {'num_blocks': num_blocks, #num of layers per block
+                                'features': num_features,
+                                'context_features': contex_features,
+                                'hidden_features': hidden_features,
+                                'use_residual_blocks': False,
+                                'use_batch_norm': use_batch_norm,
+                                'dropout_probability': dropout_probability,
+                                'activation':getattr(F, 'leaky_relu'),
+                                'random_mask': random_mask,
+                                'num_bins': 8,
+                                'tails':'linear',
+                                'tail_bound': 9,
+                                'min_bin_width': 1e-6,
+                                'min_bin_height': 1e-6,
+                                'min_derivative': 1e-6}
+    rec_flow_blocks = []
+    for _ in range(num_layers):
+        rec_flow_blocks.append(
+            MaskedPiecewiseRationalQuadraticAutoregressiveTransform(
+                **flow_params_rec_energy))
+        rec_flow_blocks.append(RandomPermutation(num_features))
+    rec_flow_transform = CompositeTransform(rec_flow_blocks)
+    # _sample not implemented:
+    #rec_flow_base_distribution = distributions.DiagonalNormal(shape=[args.num_layer+1])
+    rec_flow_base_distribution = StandardNormal(shape=[num_features])
 
+    model_S = flows.Flow(transform=rec_flow_transform, distribution=rec_flow_base_distribution).to(device)
+
+    return model_S
 
 

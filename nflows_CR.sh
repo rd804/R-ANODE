@@ -5,7 +5,7 @@
 #SBATCH --job-name=nflows_mixture_SR  # Assign a short name to your job
 #SBATCH --nodes=1                 # Number of nodes you require
 #SBATCH --ntasks=1                # Total # of tasks across all nodes
-#SBATCH --array=0-1              # Array rank
+#SBATCH --array=0-9              # Array rank
 #SBATCH --cpus-per-task=1         # Cores per task (>1 if multithread tasks)
 #SBATCH --gres=gpu:1              # Number of GPUs per node
 #SBATCH --mem=8000                # Real memory (RAM) required (MB)
@@ -24,7 +24,7 @@ conda activate manode
 #n_sig=$4
 try_='1'
 group_name='nflows_lhc_co'
-job_type='CR_bn_fixed'
+job_type='CR_ensemble'
 n_sig=1000
 
 python scripts/nflows_CR.py --try ${try_} \

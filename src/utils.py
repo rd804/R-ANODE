@@ -67,7 +67,7 @@ def generate_transformed_samples(model, data, preprocessing_params, device, numb
     mass_test = data[:,0].reshape(-1,1).type(torch.FloatTensor).to(device)
     with torch.no_grad():
        # x_samples = model.sample(len(mass_test), cond_inputs=mass_test)
-        x_samples = model.sample(len(mass_test), mass_test, )
+        x_samples = model.sample(len(mass_test), mass_test)
 
       #  x_samples = model.sample(10000, mass_test[0:10000])
     phyiscal_samples = inverse_standardize(x_samples, preprocessing_params["mean"], preprocessing_params["std"])

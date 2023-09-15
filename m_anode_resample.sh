@@ -9,7 +9,7 @@
 #SBATCH --array=0-19              # Uncomment for multiple jobs
 #SBATCH --gres=gpu:1              # Number of GPUs per node
 #SBATCH --mem=8000                # Real memory (RAM) required (MB)
-#SBATCH --time=3:00:00           # Total run time limit (HH:MM:SS)
+#SBATCH --time=4:00:00           # Total run time limit (HH:MM:SS)
 
 
 cd /scratch/rd804/m-anode/
@@ -19,9 +19,8 @@ conda activate manode
 
 #try_='1'
 #group_name='nflows_lhc_co'
-#group_name='test'
-#job_type='r_anode_model_S'
-#n_sig=1000
+#job_type='r_anode_my_model_5'
+#n_sig=300
 
 try_=$1
 group_name=$2
@@ -30,7 +29,7 @@ n_sig=$4
 
 
 python scripts/r_anode_lhc_co.py --n_sig=${n_sig} \
-        --mini_batch=256 --mode_background='freeze' --epochs=100 \
+        --mini_batch=256 --mode_background='freeze' --epochs=300 \
         --shuffle_split --resample \
         --split=${SLURM_ARRAY_TASK_ID}   \
         --seed=${try_} \

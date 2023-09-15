@@ -18,8 +18,9 @@ import argparse
 np.seterr(divide='ignore', invalid='ignore')
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--scan_set', nargs='+', type=str, default='r_anode')
+parser.add_argument('--scan_set', nargs='+', type=str, default='r_anode_RQS')
 parser.add_argument('--anode', action='store_true', help='if anode is to be plotted as well')
+parser.add_argument('--cathode', action='store_true', help='if cathode is to be plotted as well')
 parser.add_argument('--anode_set', type=str, default='SR_fixed')
 parser.add_argument('--data_dir', type=str, default='data/lhc_co')
 parser.add_argument('--config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
@@ -121,15 +122,15 @@ mean_log_CR = np.log(background_log_p+1e-32)
 #sig_train_list = [0.1, 0.3, 0.5, 0.8, 1, 1.5, 2, 5, 10]
 #n_sig_train_list = [1000, 750, 500, 250, 100, 75]
 #sig_train_list = [2.17, 1.6, 1.1, 0.54 , 0.21, 0.16]
-n_sig_train_list = [1000, 750, 500, 250, 100]
-sig_train_list = [2.17, 1.6, 1.1, 0.54 , 0.21]
+#n_sig_train_list = [1000, 750, 500, 250, 100]
+#sig_train_list = [2.17, 1.6, 1.1, 0.54 , 0.21]
 #n_sig_train_list = [1000, 750]
 #sig_train_list = [2.17, 1.6]
-
+n_sig_train_list = [1000, 600, 450 , 300]
+sig_train_list = [2.17, 1.35, 1, 0.67]
 sic_ad = [15.3, 12.5, 7, 1.25, 1.0, 1.0, 1.0]
 sic_ad_std = [2.5, 3, 5, 0.25, 0.25, 0.25, 0.25]
-
-sig_ad = [2.14, 1.35, 1.02, 0.68, 0.54, 0.34, 0.17]
+sig_ad = [2.17, 1.35, 1.0, 0.68, 0.54, 0.34, 0.17]
 
 
 
@@ -278,19 +279,24 @@ for scan in args.scan_set:
 
         for try_ in range(tries):
 
-
+            print(f'try: {try_}')
 
         #  print(f'try: {try_}')
  
 
-            SR_array = []
+            SR_shuffle = []
 
             for split in range(splits):
-           
-                model_S = DensityEstimator(args.config_file, eval_mode=True, device=device)
+                print(f'split: {split}')
+
+                model_S = flows_model_RQS(device=device)
+               # model_S = DensityEstimator(args.config_file, eval_mode=True, device=device)
                 SR_file = f'results/{group_name_r_anode}/{scan}_{sig_train}/try_{try_}_{split}'
-            
-                with open(f'{SR_file}/pre_parameters.pkl', 'rb') as f:
+                if not os.path.exists(f'{SR_file}/valloss.npy'):
+                    continue
+
+                
+                with open(f'{args.CR_path}/pre_parameters.pkl', 'rb') as f:
                     pre_parameters_SR = pickle.load(f)
 
                 x_test_SR = preprocess_params_transform(x_test_masked, pre_parameters_SR)
@@ -302,32 +308,35 @@ for scan in args.scan_set:
 
 
 
-                if not os.path.exists(f'{SR_file}/valloss.npy'):
-                    continue
+
                 
                 valloss = np.load(f'{SR_file}/valloss.npy')
-
+                testloader = torch.utils.data.DataLoader(test_tensor_S, batch_size=200000, shuffle=False)
 
                 if args.ensemble:
                     best_epoch = np.argsort(valloss)[0:10]
-                    SR_ = []
+                    SR_epoch = []
                     for epoch in best_epoch:
+                        
                         best_model_file = f'{SR_file}/model_S_{epoch}.pt'
-                        model_S.model.load_state_dict(torch.load(best_model_file, map_location=device))
-                        model_S.model.eval()
-                        model_S.model.to(device)
+                        model_S.load_state_dict(torch.load(best_model_file, map_location=device))
+                        model_S.eval()
+                        model_S.to(device)
 
                         with torch.no_grad():
-                            SR = evaluate_log_prob(model_S.model, test_tensor_S, pre_parameters_SR).cpu().detach().numpy()
-                            SR_.append(SR)
+                            log_S_data = []
+                            for i, data in enumerate(testloader):
+                                log_S_data.extend(model_S.log_prob(data[:,1:-1],context=data[:,0].reshape(-1,1)).cpu().detach().numpy().tolist())
+                            # SR = evaluate_log_prob(model_S.model, test_tensor_S, pre_parameters_SR).cpu().detach().numpy()
+                            SR_epoch.append(log_S_data)
 
-                SR_ = np.array(SR_)
+                SR_ = np.array(SR_epoch)
                 SR = np.exp(SR_)
                 SR = np.mean(SR,axis=0)
-                SR_array.append(SR)
+                SR_shuffle.append(SR)
 
-            SR_array = np.array(SR_array)
-            SR = np.mean(SR_array,axis=0)
+            SR_shuffle = np.array(SR_shuffle)
+            SR = np.mean(SR_shuffle,axis=0)
             SR = np.log(SR+1e-32)            
 
 
@@ -343,6 +352,8 @@ for scan in args.scan_set:
 
             _SIC_01.append(sic_01)
             _SIC_001.append(sic_001)
+
+            print(f'max_SIC: {np.max(sic)}')
 
         max_SIC_avg_m.append(np.mean(_max_SIC))
         max_SIC_std_m.append(np.std(_max_SIC))
@@ -369,6 +380,7 @@ for scan in args.scan_set:
     summary_m[scan]['SIC_001_std'] = SIC_001_std_m
 
     print(f'max_SIC_avg: {max_SIC_avg_m}')
+    print(f'max_SIC_std: {max_SIC_std_m}')
 
 
 figure = plt.figure()
@@ -495,11 +507,13 @@ figure = plt.figure()
 # fill between for std
 ax1 = figure.add_subplot(111)
 for scan in args.scan_set:
-    ax1.errorbar(sig_train_list,summary_m[scan]['max_SIC_avg'],yerr=summary_m[scan]['max_SIC_std'],label=f'{scan}',fmt='o')
+    ax1.errorbar(sig_train_list,summary_m[scan]['max_SIC_avg'],yerr=summary_m[scan]['max_SIC_std'],label=f'{scan}',fmt='o', capsize=5)
 
 if args.anode:
     ax1.errorbar(sig_train_list,max_SIC_avg,yerr=max_SIC_std,label='ANODE',fmt='o')
-ax1.errorbar(sig_ad,sic_ad,yerr=sic_ad_std,label='ideal AD',fmt='o')
+if args.cathode:
+    ax1.errorbar(sig_ad,sic_ad,yerr=sic_ad_std,label='ideal AD',fmt='o', capsize=5)
+
 ax1.set_xlabel('sigma_train')
 ax1.set_ylabel('SIC')
 #ax1.set_xscale('log')
