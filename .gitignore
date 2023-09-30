@@ -7,6 +7,8 @@ __pycache__/
 model_CR
 model_CR_1
 models_SR_1
+SIC*
+
 *.so
 slurm-*
 # Distribution / packaging

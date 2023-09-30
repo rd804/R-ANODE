@@ -31,11 +31,11 @@ def r_anode(model_S,model_B,w,optimizer, data_loader, params,scheduler=False ,de
     n_nans = 0
     if mode == 'train':
         model_S.train()
-        model_B.eval()
+    #    model_B.eval()
 
     else:
         model_S.eval()
-        model_B.eval()
+     #   model_B.eval()
 
     total_loss = 0
 
@@ -178,6 +178,39 @@ def anode(model,train_loader, optimizer, params, device='cpu', mode='train'):
 
     return total_loss
     
+def anode_RQS(model,train_loader, optimizer, scheduler, params, device='cpu', mode='train'):
+    
+    if mode == 'train':
+        model.train()
+    else:
+        model.eval()
+    
+    total_loss = 0
+
+
+    for batch_idx, data in enumerate(train_loader):
+
+
+        data = data[0].to(device)
+        #params = params.to(device)
+
+        if mode == 'train':
+            optimizer.zero_grad()
+        loss = -model.log_prob(data[:,1:-1],context=data[:,0].reshape(-1,1)).mean()
+        total_loss += loss.item()
+
+        if mode == 'train':
+            loss.backward()        
+            optimizer.step()
+            scheduler.step()
+
+    total_loss /= len(train_loader)
+
+ 
+
+    return total_loss
+
+
 
 def evaluate_log_prob(model, data, preprocessing_params, transform=False):
     logit_prob = model.log_probs(data[:, 1:-1], data[:,0].reshape(-1,1))
@@ -250,7 +283,7 @@ def flows_model(num_layers = 8, num_features=4, num_blocks = 2,
 def flows_model_RQS(num_layers = 6, num_features=4, num_blocks = 2, 
                 hidden_features = 64, device = 'cpu',
                 contex_features = 1, random_mask = True, 
-                use_batch_norm = True, dropout_probability = 0.0):
+                use_batch_norm = True, dropout_probability = 0.2):
     
     flow_params_rec_energy = {'num_blocks': num_blocks, #num of layers per block
                                 'features': num_features,
@@ -272,6 +305,7 @@ def flows_model_RQS(num_layers = 6, num_features=4, num_blocks = 2,
         rec_flow_blocks.append(
             MaskedPiecewiseRationalQuadraticAutoregressiveTransform(
                 **flow_params_rec_energy))
+     #   rec_flow_blocks.append(BatchNorm(num_features))
         rec_flow_blocks.append(RandomPermutation(num_features))
     rec_flow_transform = CompositeTransform(rec_flow_blocks)
     # _sample not implemented:

@@ -4,7 +4,7 @@ all_sig=1
 arr=1	
 group="nflows_lhc_co_nsig_scan"
 #group="test"
-job_type="r_anode_RQS"
+job_type="r_anode_RQS_RQS"
 
 source ~/.bashrc
 conda activate manode

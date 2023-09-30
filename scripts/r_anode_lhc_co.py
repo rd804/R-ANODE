@@ -31,7 +31,8 @@ parser.add_argument('--batch_size', type=int, default = 256, help = 'batch size'
 parser.add_argument('--mini_batch', type=int, default=256, help='mini batch size')
 parser.add_argument('--gpu', type=str, default='cuda:0', help='gpu to train on')
 parser.add_argument('--data_loss_expr', type=str, default='true_likelihood', help='loss for SR region')
-
+parser.add_argument('--true_w', action='store_true', default=True, help='if true w is used')
+parser.add_argument('--w', type=float, default=0.1, help='weight for loss function')
 
 parser.add_argument('--resample', action='store_true', help='if data is to resampled')
 parser.add_argument('--seed', type=int, default=22, help='seed')
@@ -42,6 +43,7 @@ parser.add_argument('--config_file', type=str, default='scripts/DE_MAF_model.yml
 parser.add_argument('--S_config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
 
 parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/CR_bn_fixed_1000/try_1_0', help='CR data path')
+#parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/CR_RQS_4_1000/try_1_2', help='CR data path')
 parser.add_argument('--ensemble', action='store_true',default = True ,help='if ensemble is used')
 
 parser.add_argument('--wandb', action='store_true', help='if wandb is used' )
@@ -194,24 +196,42 @@ elif args.mode_background == 'pretrained':
 
 
 log_B_val = []
+
 for i in best_epochs:
     model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/model_CR_{i}.pt", device=device)
+    
+    #model_B = flows_model_RQS(device=device, num_layers = 4, 
+     #                   num_features=4, num_blocks = 2, 
+      #          hidden_features = 32)
+    #model_B.load_state_dict(torch.load(f'{args.CR_path}/model_CR_{i}.pt'))
+    #log_B_ = model_B.log_prob(valtensor_B[:,1:-1],
+     #                         context=valtensor_B[:,0].reshape(-1,1))
     log_B_ = model_B.model.log_probs(inputs=valtensor_B[:,1:-1], cond_inputs=valtensor_B[:,0].reshape(-1,1))
     log_B_val.append(log_B_.detach().cpu().numpy())
 
 log_B_val = np.array(log_B_val)
-log_B_val = np.mean(log_B_val, axis=0)
+B_val = np.exp(log_B_val)
+B_val = np.mean(B_val, axis=0)
+log_B_val = np.log(B_val + 1e-32)
 
 
 log_B_train = []
 for i in best_epochs:
     model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/model_CR_{i}.pt", device=device)
     log_B_ = model_B.model.log_probs(inputs=traintensor_B[:,1:-1], cond_inputs=traintensor_B[:,0].reshape(-1,1))
+ 
+   # model_B = flows_model_RQS(device=device, num_layers = 4, 
+    #                    num_features=4, num_blocks = 2, 
+     #           hidden_features = 32)
+    #model_B.load_state_dict(torch.load(f'{args.CR_path}/model_CR_{i}.pt'))
+    #log_B_ = model_B.log_prob(traintensor_B[:,1:-1],
+     #                         context=traintensor_B[:,0].reshape(-1,1))
     log_B_train.append(log_B_.detach().cpu().numpy())
 
-
 log_B_train = np.array(log_B_train)
-log_B_train = np.mean(log_B_train, axis=0)
+B_train = np.exp(log_B_train)
+B_train = np.mean(B_train, axis=0)
+log_B_train = np.log(B_train + 1e-32)
 
 log_B_train_tensor = torch.from_numpy(log_B_train.astype('float32')).to(device)
 log_B_val_tensor = torch.from_numpy(log_B_val.astype('float32')).to(device)
@@ -260,12 +280,18 @@ optimizer = torch.optim.AdamW(model_S.parameters(),lr=3e-4)
 #scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.01, steps_per_epoch=len(trainloader), epochs=epochs, anneal_strategy='linear')
 #scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-4, max_lr=1e-2,cycle_momentum=False, step_size_up = len(trainloader)*30)
 
+if args.true_w:
+    w_ = true_w
+else:
+    w_ = args.w
+
+
 for epoch in range(args.epochs):
 
-    train_loss = r_anode(model_S,model_B.model,true_w,optimizer ,trainloader, 
+    train_loss = r_anode(model_S,model_B.model,w_,optimizer ,trainloader, 
                          pre_parameters, device=device, mode='train',\
                           data_loss_expr=args.data_loss_expr)
-    val_loss = r_anode(model_S,model_B.model,true_w,optimizer, valloader, 
+    val_loss = r_anode(model_S,model_B.model,w_,optimizer, valloader, 
                        pre_parameters, device=device, mode='val',\
                         data_loss_expr=args.data_loss_expr)
 
@@ -283,7 +309,7 @@ for epoch in range(args.epochs):
 
     if args.wandb:
             wandb.log({'train_loss': train_loss, 'val_loss': val_loss, \
-                'true_w': true_w})
+                'true_w': w_})
 
 
     if (np.isnan(train_loss) or np.isnan(val_loss)):
@@ -300,7 +326,7 @@ for epoch in range(args.epochs):
 
     # generate samples every 10 epochs
     if args.wandb:
-        if epoch % 10 == 0:
+        if epoch % 50 == 0:
             if ~(np.isnan(train_loss) or np.isnan(val_loss)):
                 model_S.eval()
                 
@@ -404,18 +430,39 @@ else:
 
 
 model_B = DensityEstimator(args.config_file, eval_mode=True, device=device)
+#model_B = flows_model_RQS(device=device, num_layers = 4, 
+ #                       num_features=4, num_blocks = 2, 
+  #              hidden_features = 32)
 log_B = []
 for epoch in best_epoch:
+
 #  model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/my_ANODE_model_epoch_{epoch}.par", device=device)
+   #model_B.load_state_dict(torch.load(f'{args.CR_path}/model_CR_{epoch}.pt'))
     model_B.model.load_state_dict(torch.load(f'{args.CR_path}/model_CR_{epoch}.pt'))
 
     model_B.model.eval()
+    #model_B.eval()
+    log_B_ = []
+
+  #  with torch.no_grad():
+      #  for i, data in enumerate(testloader):
+       #     log_B_.extend(model_B.log_prob(data[:,1:-1],
+         #                               context=data[:,0].reshape(-1,1)).cpu().detach().numpy().tolist())
+    
+    # log_B.append(log_B_)
+
     with torch.no_grad():
         log_p = evaluate_log_prob(model_B.model, testtensor_B, pre_parameters['CR'], transform=True).cpu().detach().numpy()
+        log_p = model_B.log_prob(traintensor_B[:,1:-1],
+                              context=traintensor_B[:,0].reshape(-1,1)).cpu().detach().numpy()
         log_B.append(log_p)
 
 log_B = np.array(log_B)
-log_B = np.mean(log_B, axis=0)
+B = np.exp(log_B)
+B = np.mean(B, axis=0)
+log_B = np.log(B + 1e-32)
+np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/ensemble_B.npy', B)
+np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/ensemble_S.npy', S)
 
 # compute likelihood ratio
 likelihood_ = log_S - log_B

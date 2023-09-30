@@ -9,7 +9,7 @@
 #SBATCH --array=0-19              # Uncomment for multiple jobs
 #SBATCH --gres=gpu:1              # Number of GPUs per node
 #SBATCH --mem=8000                # Real memory (RAM) required (MB)
-#SBATCH --time=4:00:00           # Total run time limit (HH:MM:SS)
+#SBATCH --time=5:00:00           # Total run time limit (HH:MM:SS)
 
 
 cd /scratch/rd804/m-anode/
@@ -17,15 +17,18 @@ cd /scratch/rd804/m-anode/
 source ~/.bashrc
 conda activate manode
 
-#try_='1'
+try_='1'
+group_name='test'
+job_type='r_anode_RQS_RQS_1'
+n_sig=1000
 #group_name='nflows_lhc_co'
 #job_type='r_anode_my_model_5'
 #n_sig=300
 
-try_=$1
-group_name=$2
-job_type=$3
-n_sig=$4
+#try_=$1
+#group_name=$2
+#job_type=$3
+#n_sig=$4
 
 
 python scripts/r_anode_lhc_co.py --n_sig=${n_sig} \

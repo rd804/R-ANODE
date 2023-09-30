@@ -4,6 +4,8 @@ from sklearn.cluster import KMeans
 from scipy.stats import norm
 import torch
 from src.density_estimator import DensityEstimator
+from scipy.interpolate import interp1d
+import numpy.ma as ma
 # SIC curve
 
 # some data preprocessing functions
@@ -61,6 +63,28 @@ def inverse_transform(data, params):
     return inverse_data
 
 
+def generate_transformed_samples_RQS(model, data, preprocessing_params, device, batch=2048):
+
+    for key in preprocessing_params.keys():
+        preprocessing_params[key] = preprocessing_params[key].to(device)
+
+
+    x_samples = model.sample(1, data[:,0].reshape(-1,1), batch_size=batch)
+    x_samples = x_samples.reshape(-1,4)
+    x_samples = inverse_standardize(x_samples, preprocessing_params["mean"], preprocessing_params["std"])
+    x_samples = inverse_logit_transform(x_samples, preprocessing_params["min"], preprocessing_params["max"])
+    x_samples = torch.hstack((data[:,0].reshape(-1,1), x_samples))
+    # x_samples = np.vstack((x_samples_train, x_samples_val))
+    x_samples = x_samples.cpu().detach().numpy()
+    x_samples = x_samples[~np.isnan(x_samples).any(axis=1)]
+
+    print('x_samples shape', x_samples.shape)
+    print('all_data shape', data.shape)
+   # print()
+   # phyiscal_samples = torch.hstack([data[:, 0:1], phyiscal_samples])
+
+    return x_samples
+
 
 def generate_transformed_samples(model, data, preprocessing_params, device, number=10000):
 
@@ -68,12 +92,15 @@ def generate_transformed_samples(model, data, preprocessing_params, device, numb
     with torch.no_grad():
        # x_samples = model.sample(len(mass_test), cond_inputs=mass_test)
         x_samples = model.sample(len(mass_test), mass_test)
+    
+    for key in preprocessing_params.keys():
+        preprocessing_params[key] = preprocessing_params[key].to(device)
 
       #  x_samples = model.sample(10000, mass_test[0:10000])
     phyiscal_samples = inverse_standardize(x_samples, preprocessing_params["mean"], preprocessing_params["std"])
     phyiscal_samples = inverse_logit_transform(phyiscal_samples, preprocessing_params["min"], preprocessing_params["max"])
-    print(x_samples.shape)
-    print(phyiscal_samples.shape)
+   # print(x_samples.shape)
+   # print(phyiscal_samples.shape)
    # print()
    # phyiscal_samples = torch.hstack([data[:, 0:1], phyiscal_samples])
 
@@ -107,6 +134,88 @@ def SIC(label, score):
     sic = tpr/np.sqrt(fpr)
 
     return sic, tpr, auc
+
+
+def roc_interp(label, score, tpr_interp):
+    fpr, tpr, _ = roc_curve(label, score)
+
+
+    fpr_interp = interp1d(tpr, fpr)(tpr_interp)
+
+   # indices = np.argwhere(fpr_interp>1/312858/cut**2).flatten()
+
+   # tpr_cut = np.zeros((len(tpr_interp,)))
+   # fpr_cut = np.zeros((len(tpr_interp,)))
+
+   # tpr_cut[indices] = tpr_interp[indices].flatten()
+   # fpr_cut[indices] = fpr_interp[indices].flatten()
+
+  #  tpr_cut = tpr_interp[indices].flatten()
+  #  fpr_cut = fpr_interp[indices].flatten()
+    
+    return tpr_interp, fpr_interp
+
+def ensembled_SIC(tpr_list, fpr_list, cut=0.20):
+
+    fpr_list = np.array(fpr_list)
+    tpr_list = np.array(tpr_list)
+   # eB_list = np.namnp.array(1/fpr_list)
+    cuts = (fpr_list > 1/(312858*cut**2)).flatten()*1
+
+    fpr_list_mx = ma.masked_array(fpr_list, mask=1-cuts, fill_value=np.nan).filled()
+    tpr_list_mx = ma.masked_array(tpr_list, mask=1-cuts, fill_value=np.nan).filled() 
+
+    fpr_median = np.nanmedian(fpr_list_mx, axis=0)
+    fpr_max = np.nanpercentile(fpr_list_mx, 84, axis=0)
+    fpr_min = np.nanpercentile(fpr_list_mx, 16, axis=0)
+
+
+    tpr_median = np.nanmedian(tpr_list_mx, axis=0)
+    cuts = np.argwhere(fpr_median > 1/(312858*cut**2)).flatten()
+
+    tpr_median = tpr_median[cuts]
+    fpr_median = fpr_median[cuts]
+    fpr_max = fpr_max[cuts]
+    fpr_min = fpr_min[cuts]
+
+    sic_median = np.nan_to_num(tpr_median/np.sqrt(fpr_median), posinf=0)
+    sic_max = np.nan_to_num(tpr_median/np.sqrt(fpr_max), posinf=0)
+    sic_min = np.nan_to_num(tpr_median/np.sqrt(fpr_min), posinf=0)
+    tpr_median = np.nan_to_num(tpr_median, posinf=0)
+
+    return sic_median, sic_max, sic_min, tpr_median
+
+    
+
+
+
+
+def SIC_cut(label, score, cut=0.2):
+    fpr, tpr, thresholds = roc_curve(label, score)
+    auc = roc_auc_score(label, score)
+
+    tpr = tpr[fpr>0]
+    fpr = fpr[fpr>0]
+    indices = np.argwhere(fpr>1/312858/cut**2)
+
+    tpr_cut = tpr[indices]
+    fpr_cut = fpr[indices]
+
+    sic_cut = tpr_cut/np.sqrt(fpr_cut)
+    max_sic = np.nanmax(np.nan_to_num(sic_cut, posinf=0), initial=0)
+
+    return sic_cut, tpr_cut, max_sic
+
+
+def max_SIC(label, score, cut=0.2):
+    fpr, tpr, _ = roc_curve(label, score)
+
+    tpr = tpr[fpr>0]
+    fpr = fpr[fpr>0]
+
+    sic = tpr/np.sqrt(fpr)
+
+    return np.nanmax(np.nan_to_num(sic, posinf=0),where= fpr>1/312858/cut**2, initial=0)
 
 def prior(pcx):
     return pcx.mean()
