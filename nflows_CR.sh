@@ -25,10 +25,11 @@ conda activate manode
 try_='1'
 group_name='nflows_lhc_co'
 #group_name='test'
-job_type='CR_RQS_8'
+job_type='CR_uncond'
+#job_type='CR__8'
 n_sig=1000
 
-python scripts/nflows_CR_RQS.py --try ${try_} \
+python scripts/nflows_CR_uncond.py --try ${try_} \
     --epochs=200 --batch_size=256 --shuffle_split \
     --split=${SLURM_ARRAY_TASK_ID} --seed ${try_} \
     --wandb \

@@ -26,7 +26,7 @@ do
                 --n_sig=${nsig} \
                 --wandb \
                 --wandb_group='BDT' \
-                --wandb_job_type='IAD_base_80_'${nsig} \
+                --wandb_job_type='IAD_weighted_80_'${nsig} \
                 --wandb_run_name='sample'_${SLURM_ARRAY_TASK_ID} \
 
 done

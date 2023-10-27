@@ -32,9 +32,17 @@ def separate_SB_SR(data, minmass, maxmass):
 
 # the "data" containing too much signal
 def resample_split(data_dir, n_sig = 1000 , resample_seed = 1,\
-                   minmass = 3.3, maxmass = 3.7, resample = True):
+                   minmass = 3.3, maxmass = 3.7, resample = True,
+                   noise = False, noise_seed = 0, n_noise = 5):
     background = np.load(f'{data_dir}/data_bg.npy')
     signal = np.load(f'{data_dir}/data_sig.npy')[:-30_000]
+
+    if noise:
+        total_data = len(signal) + len(background)
+        np.random.seed(noise_seed)
+        noise = np.random.multivariate_normal(np.zeros(n_noise), np.eye(n_noise), total_data)
+        signal = np.concatenate((signal, noise[:len(signal)]), axis=1)
+        background = np.concatenate((background, noise[len(signal):]), axis=1)
 
     # choose 1000 signal events
     # random choice of 1000 signal events

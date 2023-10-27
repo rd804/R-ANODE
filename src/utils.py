@@ -26,7 +26,42 @@ def inverse_logit_transform(x, min_vals, max_vals):
 def inverse_standardize(x, mean, std):
     return x * std + mean
 
+def preprocess_params_fit_all(data):
+    preprocessing_params = {}
+    preprocessing_params["min"] = np.min(data[:,1:-1], axis=0)
+    preprocessing_params["max"] = np.max(data[:,1:-1], axis=0)
 
+    preprocessed_data_x, mask = logit_transform(data[:,1:-1], preprocessing_params["min"], preprocessing_params["max"])
+    preprocessed_data = np.hstack([data[:,0].reshape(-1,1),preprocessed_data_x, data[:,-1].reshape(-1,1)])[mask]
+
+    preprocessing_params["mean"] = np.mean(preprocessed_data[:,1:-1], axis=0)
+    preprocessing_params["std"] = np.std(preprocessed_data[:,1:-1], axis=0)
+
+    return preprocessing_params
+
+def preprocess_params_transform_feature(data, params):
+    preprocessed_data_x, mask = logit_transform(data,
+                                                params["min"], params["max"])
+    preprocessed_data_x = standardize(preprocessed_data_x, params["mean"], params["std"])
+    return preprocessed_data_x
+
+
+def preprocess_params_transform_all(data, params):
+    preprocessed_data_x, mask = logit_transform(data[:,:-1],
+                                                 params["min"], params["max"])
+    preprocessed_data_x = standardize(preprocessed_data_x, params["mean"], params["std"])
+    preprocessed_data = np.hstack([preprocessed_data_x, data[:,-1].reshape(-1,1)])[mask]
+
+
+    return preprocessed_data
+
+
+def inverse_transform(data, params):
+    inverse_data = inverse_standardize(data[:, 1:-1], params["mean"], params["std"])
+    inverse_data = inverse_logit_transform(inverse_data, params["min"], params["max"])
+    inverse_data = torch.hstack([data[:, 0:1], inverse_data, data[:, -1:]])
+
+    return inverse_data
 
 def preprocess_params_fit(data):
     preprocessing_params = {}
@@ -53,12 +88,10 @@ def preprocess_params_transform(data, params):
 
     return preprocessed_data
 
-
-
-def inverse_transform(data, params):
-    inverse_data = inverse_standardize(data[:, 1:-1], params["mean"], params["std"])
+def inverse_transform_all(data, params):
+    inverse_data = inverse_standardize(data[:, :-1], params["mean"], params["std"])
     inverse_data = inverse_logit_transform(inverse_data, params["min"], params["max"])
-    inverse_data = torch.hstack([data[:, 0:1], inverse_data, data[:, -1:]])
+    inverse_data = torch.hstack([inverse_data, data[:, -1:]])
 
     return inverse_data
 
@@ -106,7 +139,25 @@ def generate_transformed_samples(model, data, preprocessing_params, device, numb
 
     return phyiscal_samples
 
+def generate_transformed_samples_uncond(model, data, preprocessing_params, device, number=10000):
 
+    mass_test = data[:,0].reshape(-1,1).type(torch.FloatTensor).to(device)
+    with torch.no_grad():
+       # x_samples = model.sample(len(mass_test), cond_inputs=mass_test)
+        x_samples = model.sample(len(mass_test))
+    
+    for key in preprocessing_params.keys():
+        preprocessing_params[key] = preprocessing_params[key].to(device)
+
+      #  x_samples = model.sample(10000, mass_test[0:10000])
+    phyiscal_samples = inverse_standardize(x_samples, preprocessing_params["mean"], preprocessing_params["std"])
+    phyiscal_samples = inverse_logit_transform(phyiscal_samples, preprocessing_params["min"], preprocessing_params["max"])
+   # print(x_samples.shape)
+   # print(phyiscal_samples.shape)
+   # print()
+   # phyiscal_samples = torch.hstack([data[:, 0:1], phyiscal_samples])
+
+    return phyiscal_samples
 
 
 

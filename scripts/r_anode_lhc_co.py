@@ -31,9 +31,10 @@ parser.add_argument('--batch_size', type=int, default = 256, help = 'batch size'
 parser.add_argument('--mini_batch', type=int, default=256, help='mini batch size')
 parser.add_argument('--gpu', type=str, default='cuda:0', help='gpu to train on')
 parser.add_argument('--data_loss_expr', type=str, default='true_likelihood', help='loss for SR region')
-parser.add_argument('--true_w', action='store_true', default=True, help='if true w is used')
+parser.add_argument('--w_scan', action='store_true',  help='if true w is used')
 parser.add_argument('--w', type=float, default=0.1, help='weight for loss function')
 
+parser.add_argument('--validation_fraction', type=float, default=0.2, help='validation fraction')
 parser.add_argument('--resample', action='store_true', help='if data is to resampled')
 parser.add_argument('--seed', type=int, default=22, help='seed')
 parser.add_argument('--shuffle_split', action='store_true', help='if shuffle split is used')
@@ -133,7 +134,7 @@ if not args.shuffle_split:
     data_train_B, data_val_B = train_test_split(x_train_B, test_size=0.5, random_state=args.seed)
 
 else:
-    ss_data = ShuffleSplit(n_splits=20, test_size=0.2, random_state=22)
+    ss_data = ShuffleSplit(n_splits=20, test_size=args.validation_fraction, random_state=22)
 
     print(f'doing a shuffle split with split number {args.split}')
 
@@ -280,7 +281,7 @@ optimizer = torch.optim.AdamW(model_S.parameters(),lr=3e-4)
 #scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.01, steps_per_epoch=len(trainloader), epochs=epochs, anneal_strategy='linear')
 #scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-4, max_lr=1e-2,cycle_momentum=False, step_size_up = len(trainloader)*30)
 
-if args.true_w:
+if not args.w_scan:
     w_ = true_w
 else:
     w_ = args.w
@@ -452,15 +453,17 @@ for epoch in best_epoch:
     # log_B.append(log_B_)
 
     with torch.no_grad():
-        log_p = evaluate_log_prob(model_B.model, testtensor_B, pre_parameters['CR'], transform=True).cpu().detach().numpy()
-        log_p = model_B.log_prob(traintensor_B[:,1:-1],
-                              context=traintensor_B[:,0].reshape(-1,1)).cpu().detach().numpy()
+        log_p = evaluate_log_prob(model_B.model, testtensor_B, pre_parameters['CR'], 
+                                  transform=False).cpu().detach().numpy()
+       # log_p = model_B.log_prob(traintensor_B[:,1:-1],
+        #                      context=traintensor_B[:,0].reshape(-1,1)).cpu().detach().numpy()
         log_B.append(log_p)
 
 log_B = np.array(log_B)
 B = np.exp(log_B)
 B = np.mean(B, axis=0)
 log_B = np.log(B + 1e-32)
+
 np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/ensemble_B.npy', B)
 np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/ensemble_S.npy', S)
 
@@ -478,7 +481,6 @@ plt.plot(tpr_score, sic_score, label='score')
 plt.plot(tpr_score, tpr_score**0.5, label='random')
 plt.xlabel('signal efficiency')
 plt.ylabel('SIC')
-
 plt.legend(loc='lower right')
 if args.wandb:
     wandb.log({'SIC': wandb.Image(figure)})

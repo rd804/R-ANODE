@@ -2,9 +2,9 @@
 
 all_sig=1
 arr=1	
-group="nflows_lhc_co"
+group="nflows_lhc_co_nsig_scan"
 #group='test'
-job_type="anode_SR_verify"
+job_type="anode_SR_RQS"
 
 
 source ~/.bashrc
@@ -15,12 +15,12 @@ while ((${#all_sig[@]}))
 do
     all_sig=()
     
-   for n_sig in 1000
+    for n_sig in 75 150 225 300 450 500 600 1000
    # for sig in 0.4 0.5 0.6 0.7
    # for sig in 1
     do
         arr=()
-        for j in 1
+        for j in 0
         do
             for split in {0..19..1}
             do

@@ -9,6 +9,9 @@ from src.generate_data_lhc import *
 from src.utils import *
 from src.flows import *
 
+# import sklearn sample_weights
+from sklearn.utils.class_weight import compute_sample_weight
+
 from nflows import transforms, distributions, flows
 import torch
 import torch.nn.functional as F
@@ -103,11 +106,17 @@ background_S = preprocess_params_transform(background, pre_parameters)
 labels = np.concatenate([np.ones(len(x_train_S)), np.zeros(len(background_S))])
 data = np.concatenate([x_train_S, background_S])[:,1:-1]
 
+# sample weights using sklearn
+
+
+
 # create masked test data
 _x_test = np.load(f'{args.data_dir}/x_test.npy')
 _, mask_test = logit_transform(_x_test[:,1:-1], pre_parameters['min'],
                                 pre_parameters['max'])
 
+
+sample_weights = compute_sample_weight(class_weight='balanced', y=labels)
 
 x_test = _x_test[mask_test]
 label_test = x_test[:,-1]
@@ -121,7 +130,7 @@ for _shuffle in range(args.ensemble_size):
     clf = HistGradientBoostingClassifier(
         validation_fraction=0.2,max_iter=200, random_state=_shuffle,verbose=0)
     
-    clf.fit(data, labels)
+    clf.fit(data, labels, sample_weight=sample_weights)
     predict = clf.predict_proba(x_test_S)[:,1]
     ypred.append(predict)
 
