@@ -28,14 +28,14 @@ def inverse_standardize(x, mean, std):
 
 def preprocess_params_fit_all(data):
     preprocessing_params = {}
-    preprocessing_params["min"] = np.min(data[:,1:-1], axis=0)
-    preprocessing_params["max"] = np.max(data[:,1:-1], axis=0)
+    preprocessing_params["min"] = np.min(data[:,:-1], axis=0)
+    preprocessing_params["max"] = np.max(data[:,:-1], axis=0)
 
-    preprocessed_data_x, mask = logit_transform(data[:,1:-1], preprocessing_params["min"], preprocessing_params["max"])
-    preprocessed_data = np.hstack([data[:,0].reshape(-1,1),preprocessed_data_x, data[:,-1].reshape(-1,1)])[mask]
+    preprocessed_data_x, mask = logit_transform(data[:,:-1], preprocessing_params["min"], preprocessing_params["max"])
+    preprocessed_data = np.hstack([preprocessed_data_x, data[:,-1].reshape(-1,1)])[mask]
 
-    preprocessing_params["mean"] = np.mean(preprocessed_data[:,1:-1], axis=0)
-    preprocessing_params["std"] = np.std(preprocessed_data[:,1:-1], axis=0)
+    preprocessing_params["mean"] = np.mean(preprocessed_data[:,:-1], axis=0)
+    preprocessing_params["std"] = np.std(preprocessed_data[:,:-1], axis=0)
 
     return preprocessing_params
 

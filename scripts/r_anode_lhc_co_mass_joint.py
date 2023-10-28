@@ -54,10 +54,7 @@ parser.add_argument('--wandb_job_type', type=str, default='lhc_co')
 parser.add_argument('--wandb_run_name', type=str, default='joint_test_2')
 #
 
-
-
-
-args = parser.parse_args()
+args = parser.parse_args(args=[])
 
 #args.wandb = True
 if os.path.exists(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/valloss.npy'):
@@ -114,44 +111,40 @@ if args.wandb:
 with open(f'{args.CR_path}/pre_parameters.pkl', 'rb') as f:
     pre_parameters_CR = pickle.load(f)
 
-print('pre_parameters_CR:', pre_parameters_CR)
-
-pre_parameters_SR = pre_parameters_CR.copy()
-
-print('pre_parameters_CR:', pre_parameters_CR)
+pre_parameters_SR = preprocess_params_fit_all(SR_data)
 
 _, mask_CR = logit_transform(SR_data[:,1:-1], pre_parameters_CR['min'],
                              pre_parameters_CR['max'])
+_, mask_SR = logit_transform(SR_data[:,:-1], pre_parameters_SR['min'],
+                                pre_parameters_SR['max'])
 
+mask = mask_CR & mask_SR
 
-
-x_train = SR_data[mask_CR]
+x_train = SR_data[mask]
 
 print('x_train shape', x_train.shape)
 
 # have two seperate transforms of the data for model_S and model_B
+x_train_S = preprocess_params_transform_all(x_train, pre_parameters_SR) 
 x_train_B = preprocess_params_transform(x_train, pre_parameters_CR)
-m_train = x_train_B[:,0].reshape(-1,1) - 3.5
-x_train_S = np.hstack((m_train, x_train_B[:,1:]))  
-#x_train_B = preprocess_params_transform(x_train, pre_parameters_CR)
 print('x_train_S shape', x_train_S.shape)
 
 # create masked test data
 _x_test = np.load(f'{args.data_dir}/x_test.npy')
 _, mask_CR = logit_transform(_x_test[:,1:-1], pre_parameters_CR['min'],
                                 pre_parameters_CR['max'])
-
-x_test = _x_test[mask_CR]
-
+_, mask_SR = logit_transform(_x_test[:,:-1], pre_parameters_SR['min'],
+                                pre_parameters_SR['max'])
+mask = mask_CR & mask_SR
+x_test = _x_test[mask]
 x_test_B = preprocess_params_transform(x_test, pre_parameters_CR)
-m_test = x_test_B[:,0].reshape(-1,1) - 3.5
-x_test_S = np.hstack((m_test, x_test_B[:,1:]))
+x_test_S = preprocess_params_transform_all(x_test, pre_parameters_SR)
 
 
 if not args.shuffle_split: 
-   # pass   
-    data_train_S, data_val_S = train_test_split(x_train_S, test_size=0.5, random_state=args.seed)
-    data_train_B, data_val_B = train_test_split(x_train_B, test_size=0.5, random_state=args.seed)
+    # pass   
+    data_train_S, data_val_S = train_test_split(x_train_S, test_size=0.2, random_state=args.seed)
+    data_train_B, data_val_B = train_test_split(x_train_B, test_size=0.2, random_state=args.seed)
 
 else:
     ss_data = ShuffleSplit(n_splits=20, test_size=args.validation_fraction, random_state=22)
@@ -164,10 +157,6 @@ else:
             data_train_B, data_val_B = x_train_B[train_index], x_train_B[test_index]
             break
 
-transformed_mass = mass.reshape(-1,1) - 3.5
-hist_back = np.histogram(transformed_mass[labels==0], bins=bins, density=True)
-density_back = rv_histogram(hist_back)
-#x_test = preprocess_params_transform(_x_test, pre_parameters)
 
 
 traintensor_S = torch.from_numpy(data_train_S.astype('float32')).to(device)
@@ -175,8 +164,7 @@ traintensor_B = torch.from_numpy(data_train_B.astype('float32')).to(device)
 
 valtensor_S = torch.from_numpy(data_val_S.astype('float32')).to(device)
 valtensor_B = torch.from_numpy(data_val_B.astype('float32')).to(device)
-#testtensor = torch.from_numpy(x_test.astype('float32')).to(device)
-#testtensor_S = torch.from_numpy(x_test_SR.astype('float32')).to(device)
+
 testtensor_S = torch.from_numpy(x_test_S.astype('float32')).to(device)
 testtensor_B = torch.from_numpy(x_test_B.astype('float32')).to(device)
 
@@ -184,26 +172,21 @@ print('X_train shape', traintensor_S.shape)
 print('X_val shape', valtensor_S.shape)
 print('X_test shape', testtensor_S.shape)
 
-#pre_parameters_S_tensor = pre_parameters_SR.copy()
-pre_parameters_B_tensor = pre_parameters_CR.copy()
+pre_parameters_CR_tensor = pre_parameters_CR.copy()
+pre_parameters_SR_tensor = pre_parameters_SR.copy()
 
-#for key in pre_parameters_S_tensor.keys():
- #   pre_parameters_S_tensor[key] = torch.from_numpy(pre_parameters_S_tensor[key].astype('float32')).to(device)
+for key in pre_parameters_CR_tensor.keys():
+    pre_parameters_CR_tensor[key] = torch.from_numpy(pre_parameters_CR_tensor[key].astype('float32')).to(device)
 
-for key in pre_parameters_B_tensor.keys():
-    pre_parameters_B_tensor[key] = torch.from_numpy(pre_parameters_B_tensor[key].astype('float32')).to(device)
-
-
+for key in pre_parameters_SR_tensor.keys():
+    pre_parameters_SR_tensor[key] = torch.from_numpy(pre_parameters_SR_tensor[key].astype('float32')).to(device)
 
 if args.mode_background == 'train':
     pass
 
 elif args.mode_background == 'freeze':
- #   val_losses = np.load(f'{args.CR_path}/my_ANODE_model_val_losses.npy')
     val_losses = np.load(f'{args.CR_path}/valloss_list.npy')
     best_epochs = np.argsort(val_losses)[0:10]
-    #model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/my_ANODE_model_epoch_{best_epoch}.par", device=device)
-   # model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/model_CR_{best_epoch}.pt", device=device)
 
 elif args.mode_background == 'pretrained':
     val_losses = np.load(f'{args.CR_path}/my_ANODE_model_val_losses.npy')
@@ -216,13 +199,6 @@ log_B_val = []
 
 for i in best_epochs:
     model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/model_CR_{i}.pt", device=device)
-    
-    #model_B = flows_model_RQS(device=device, num_layers = 4, 
-     #                   num_features=4, num_blocks = 2, 
-      #          hidden_features = 32)
-    #model_B.load_state_dict(torch.load(f'{args.CR_path}/model_CR_{i}.pt'))
-    #log_B_ = model_B.log_prob(valtensor_B[:,1:-1],
-     #                         context=valtensor_B[:,0].reshape(-1,1))
     log_B_ = model_B.model.log_probs(inputs=valtensor_B[:,1:-1], cond_inputs=valtensor_B[:,0].reshape(-1,1))
     log_B_val.append(log_B_.detach().cpu().numpy())
 
@@ -236,13 +212,6 @@ log_B_train = []
 for i in best_epochs:
     model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/model_CR_{i}.pt", device=device)
     log_B_ = model_B.model.log_probs(inputs=traintensor_B[:,1:-1], cond_inputs=traintensor_B[:,0].reshape(-1,1))
- 
-   # model_B = flows_model_RQS(device=device, num_layers = 4, 
-    #                    num_features=4, num_blocks = 2, 
-     #           hidden_features = 32)
-    #model_B.load_state_dict(torch.load(f'{args.CR_path}/model_CR_{i}.pt'))
-    #log_B_ = model_B.log_prob(traintensor_B[:,1:-1],
-     #                         context=traintensor_B[:,0].reshape(-1,1))
     log_B_train.append(log_B_.detach().cpu().numpy())
 
 log_B_train = np.array(log_B_train)
@@ -253,18 +222,18 @@ log_B_train = np.log(B_train + 1e-32)
 log_B_train_tensor = torch.from_numpy(log_B_train.astype('float32')).to(device)
 log_B_val_tensor = torch.from_numpy(log_B_val.astype('float32')).to(device)
 
-#train_mass_prob_sig = torch.from_numpy(density_sig.pdf(traintensor_S[:,0].cpu().detach().numpy())).to(device)
-train_mass_prob_back = torch.from_numpy(density_back.pdf(traintensor_S[:,0].cpu().detach().numpy())).to(device)
-#val_mass_prob_sig = torch.from_numpy(density_sig.pdf(valtensor_S[:,0].cpu().detach().numpy())).to(device)
-val_mass_prob_back = torch.from_numpy(density_back.pdf(valtensor_S[:,0].cpu().detach().numpy())).to(device)
-#test_mass_prob_sig = torch.from_numpy(density_sig.pdf(testtensor_S[:,0].cpu().detach().numpy())).to(device)
-test_mass_prob_back = torch.from_numpy(density_back.pdf(testtensor_S[:,0].cpu().detach().numpy())).to(device)
+train_mass_prob_back = torch.from_numpy(density_back.pdf(traintensor_B[:,0].cpu().detach().numpy())).to(device)
+val_mass_prob_back = torch.from_numpy(density_back.pdf(valtensor_B[:,0].cpu().detach().numpy())).to(device)
+test_mass_prob_back = torch.from_numpy(density_back.pdf(testtensor_B[:,0].cpu().detach().numpy())).to(device)
 
 train_tensor = torch.utils.data.TensorDataset(traintensor_S, log_B_train_tensor, train_mass_prob_back)
 val_tensor = torch.utils.data.TensorDataset(valtensor_S, log_B_val_tensor, val_mass_prob_back)
-#test_tensor = torch.utils.data.TensorDataset(testtensor_S, test_mass_prob_back)
 
-#test_tensor = torch.utils.data.TensorDataset(testtensor)
+
+plt.hist(traintensor_S[:,0].cpu().detach().numpy(), bins=50, density=True, label='train')
+plt.hist(traintensor_B[:,0].cpu().detach().numpy(), bins=50, density=True, label='val')
+plt.legend()
+plt.show()
 
 
 # Use the standard pytorch DataLoader
@@ -273,31 +242,25 @@ trainloader = torch.utils.data.DataLoader(train_tensor, batch_size=batch_size, s
 
 test_batch_size=batch_size*5
 valloader = torch.utils.data.DataLoader(val_tensor, batch_size=test_batch_size, shuffle=False)
-#testloader = torch.utils.data.DataLoader(test_tensor, batch_size=test_batch_size, shuffle=False)
 
 
 model_S = flows_model_RQS(device=device, num_features=5, context_features=None)
-# model_S = DensityEstimator(args.S_config_file, eval_mode=False, device=device)
-
-print(model_S)
+#print(model_S)
 
 
 
 valloss = []
 trainloss = []
 
-
-
-
 pre_parameters = {}
 
-pre_parameters['CR'] = pre_parameters_B_tensor
-pre_parameters['SR'] = pre_parameters_B_tensor
+pre_parameters['CR'] = pre_parameters_CR_tensor
+pre_parameters['SR'] = pre_parameters_SR_tensor
 
 # needed for sampling
-train_data = inverse_transform(traintensor_B, pre_parameters['CR']).cpu().detach().numpy()
-val_data = inverse_transform(valtensor_B, pre_parameters['CR']).cpu().detach().numpy()
-all_data = np.vstack((train_data, val_data))
+#train_data = inverse_transform(traintensor_B, pre_parameters['CR']).cpu().detach().numpy()
+#val_data = inverse_transform(valtensor_B, pre_parameters['CR']).cpu().detach().numpy()
+#all_data = np.vstack((train_data, val_data))
 
 # one cycle lr scheduler
 epochs = args.epochs
@@ -311,7 +274,9 @@ else:
     w_ = args.w
 
 
-for epoch in range(args.epochs):
+
+
+for epoch in range(100):
 
     train_loss = r_anode_mass_joint(model_S,model_B.model,w_,optimizer ,trainloader, 
                          pre_parameters, device=device, mode='train',\
@@ -333,8 +298,7 @@ for epoch in range(args.epochs):
 
 
     if args.wandb:
-            wandb.log({'train_loss': train_loss, 'val_loss': val_loss, \
-                'true_w': w_})
+            wandb.log({'train_loss': train_loss, 'val_loss': val_loss,                 'true_w': w_})
 
 
     if (np.isnan(train_loss) or np.isnan(val_loss)):
@@ -350,52 +314,44 @@ for epoch in range(args.epochs):
     trainloss.append(train_loss)
 
     # generate samples every 10 epochs
-    if args.wandb:
-        if epoch % 50 == 0:
-            if ~(np.isnan(train_loss) or np.isnan(val_loss)):
-                model_S.eval()
-                with torch.no_grad():
-                    x_samples = model_S.sample(len(train_tensor), batch_size=1000)
-                x_samples = x_samples.reshape(-1,5)
-                x_samples = torch.hstack((x_samples, torch.ones((len(x_samples),1)).to(device)))
-                x_samples = inverse_transform(x_samples, pre_parameters['CR']).cpu().detach().numpy()
-               # x_samples = inverse_standardize(x_samples, pre_parameters_CR["mean"], pre_parameters_CR["std"])
-               # x_samples = inverse_logit_transform(x_samples, pre_parameters_CR["min"], pre_parameters_CR["max"])
-               # x_samples = torch.hstack((traintensor_S[:,0].reshape(-1,1).detach().cpu(), x_samples))
-       # x_samples = np.vstack((x_samples_train, x_samples_val))
-                x_samples = x_samples[~np.isnan(x_samples).any(axis=1)]
-                x_samples[:,0]+=3.5
+    if epoch % 1 == 0:
+        if ~(np.isnan(train_loss) or np.isnan(val_loss)):
+            model_S.eval()
+            with torch.no_grad():
+                x_samples = model_S.sample(len(train_tensor), batch_size=1000)
+            x_samples = x_samples.reshape(-1,5)
+            x_samples = torch.hstack((x_samples, torch.ones((len(x_samples),1)).to(device)))
+            x_samples = inverse_transform_all(x_samples, pre_parameters['SR']).cpu().detach().numpy()
+            x_samples = x_samples[~np.isnan(x_samples).any(axis=1)]
 
-                print('x_samples shape', x_samples.shape)
-                print('all_data shape', all_data.shape)
+            print('x_samples shape', x_samples.shape)
+           # print('all_data shape', all_data.shape)
 
-                figure = plt.figure(figsize=(5,5))
-                bins_0 = np.linspace(3.3, 3.7, 50)
-                for i in range(0,5):
-                    plt.subplot(3,2,i+1)
-                    #if dims > 1:
-                    if i == 0:
-                        plt.hist(all_data[:,i][all_data[:,-1]==1],bins=bins_0, density=True, label=f'sig', histtype='step')
-                        plt.hist(all_data[:,i][all_data[:,-1]==0],bins=bins_0, density=True, label=f'back', histtype='step')
-                        plt.hist(x_samples[:,i],bins=bins_0, density=True, label=f'sample', histtype='step')
-                       # plt.legend(loc='upper right')
-                    else:
-                        plt.hist(all_data[:,i][all_data[:,-1]==1],bins=50, density=True, label=f'sig', histtype='step')
-                        plt.hist(all_data[:,i][all_data[:,-1]==0],bins=50, density=True, label=f'back', histtype='step')
-                        plt.hist(x_samples[:,i],bins=50, density=True, label=f'sample', histtype='step')
-                     #   plt.legend(loc='upper right')
-                # plt.title(f'Nflow vs S for {i}, epoch {epoch}')
-                    plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/nflow_S_{i}.png')
-                
-                if args.wandb:
-                    wandb.log({f'nflow_S': wandb.Image(figure)})
-
-                plt.close()
+            figure = plt.figure(figsize=(5,5))
+            bins_0 = np.linspace(3.3, 3.7, 50)
+            for i in range(0,5):
+                plt.subplot(3,2,i+1)
+                #if dims > 1:
+                if i == 0:
+                    plt.hist(x_test[:,i][x_test[:,-1]==1],bins=bins_0, density=True, label=f'sig', histtype='step')
+                    plt.hist(x_test[:,i][x_test[:,-1]==0],bins=bins_0, density=True, label=f'back', histtype='step')
+                    plt.hist(x_samples[:,i],bins=bins_0, density=True, label=f'sample', histtype='step')
+                    # plt.legend(loc='upper right')
+                else:
+                    plt.hist(x_test[:,i][x_test[:,-1]==1],bins=50, density=True, label=f'sig', histtype='step')
+                    plt.hist(x_test[:,i][x_test[:,-1]==0],bins=50, density=True, label=f'back', histtype='step')
+                    plt.hist(x_samples[:,i],bins=50, density=True, label=f'sample', histtype='step')
+            
+            if args.wandb:
+                wandb.log({f'nflow_S': wandb.Image(figure)})
+            
+            plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/nflow_S_{epoch}.png')
+            plt.close()
 
 
 
 #if ~np.isnan(train_loss) or ~np.isnan(val_loss):
-testloader = torch.utils.data.DataLoader(testtensor_S, batch_size=test_batch_size*10, shuffle=False)
+# testloader = torch.utils.data.DataLoader(testtensor_S, batch_size=test_batch_size*10, shuffle=False)
 
 # Load best model and ensemble
 if not args.ensemble:
@@ -418,9 +374,11 @@ else:
         
         model_S.eval()
         log_S_ = []
-        for i, data in enumerate(testloader):
-            with torch.no_grad():
-                log_S_.extend(model_S.log_prob(data[:,:-1]).cpu().detach().numpy().tolist())
+       # for i, data in enumerate(testloader):
+        with torch.no_grad():
+                #log_S_.extend(model_S.log_prob(data[:,:-1]).cpu().detach().numpy().tolist())
+            log_S_ = evaluate_log_prob_mass(model_S, testtensor_S,preprocessing_params=pre_parameters['SR'], transform=True, mode='test').cpu().detach().numpy()
+                                                
            
         #log_S_ = evaluate_log_prob(model_S.model, testtensor_S, 
                                     #pre_parameters['SR'], transform = True).cpu().detach().numpy()
@@ -434,16 +392,17 @@ else:
     log_S = np.log(S + 1e-32)
 
 
+
+
 if args.mode_background == 'train' or args.mode_background == 'pretrained':
     model_B.model.load_state_dict(torch.load(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/model_B_{index}.pt'))
 
-test_data = inverse_transform(testtensor_S, pre_parameters['SR']).cpu().detach().numpy()
-label_test = test_data[:,-1]
+#test_data = inverse_transform_all(testtensor_S, pre_parameters['SR']).cpu().detach().numpy()
 
 model_S.eval()
 
-train_data = inverse_transform(traintensor_S, pre_parameters['SR']).cpu().detach().numpy()
-val_data = inverse_transform(valtensor_S, pre_parameters['SR']).cpu().detach().numpy()
+#train_data = inverse_transform(traintensor_S, pre_parameters['SR']).cpu().detach().numpy()
+#val_data = inverse_transform(valtensor_S, pre_parameters['SR']).cpu().detach().numpy()
 
 
 # save lowest 10 epochs and delete the rest
@@ -455,7 +414,7 @@ for file_ in file_list:
 
 
 
-# load CR model
+# load CR model and evaluate on test_data
 val_losses = np.load(f'{args.CR_path}/valloss_list.npy')
 
 if not args.ensemble:
@@ -465,29 +424,16 @@ else:
 
 
 model_B = DensityEstimator(args.config_file, eval_mode=True, device=device)
-#model_B = flows_model_RQS(device=device, num_layers = 4, 
- #                       num_features=4, num_blocks = 2, 
-  #              hidden_features = 32)
+
 log_B = []
 for epoch in best_epoch:
 
-#  model_B = DensityEstimator(args.config_file, eval_mode=True, load_path=f"{args.CR_path}/my_ANODE_model_epoch_{epoch}.par", device=device)
-   #model_B.load_state_dict(torch.load(f'{args.CR_path}/model_CR_{epoch}.pt'))
     model_B.model.load_state_dict(torch.load(f'{args.CR_path}/model_CR_{epoch}.pt'))
 
     model_B.model.eval()
-    #model_B.eval()
-    #log_B_ = []
-
-  #  with torch.no_grad():
-      #  for i, data in enumerate(testloader):
-       #     log_B_.extend(model_B.log_prob(data[:,1:-1],
-         #                               context=data[:,0].reshape(-1,1)).cpu().detach().numpy().tolist())
-    
-    # log_B.append(log_B_)
 
     with torch.no_grad():
-        log_p = evaluate_log_prob(model_B.model, testtensor_S, pre_parameters['CR'], 
+        log_p = evaluate_log_prob(model_B.model, testtensor_B, pre_parameters['CR'], 
                                   transform=False).cpu().detach().numpy()
        # log_p = model_B.log_prob(traintensor_B[:,1:-1],
         #                      context=traintensor_B[:,0].reshape(-1,1)).cpu().detach().numpy()
@@ -499,11 +445,51 @@ B = np.mean(B, axis=0)
 log_B = np.log(B + 1e-32)
 
 np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/ensemble_B.npy', B)
-np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/ensemble_S.npy', S)
+np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/ensemble_S_joint.npy', S)
 
 # compute likelihood ratio
 #likelihood_ = log_S - log_B
 #likelihood = np.nan_to_num(likelihood_, nan=0, posinf=0, neginf=0)        
+
+#########################################
+# estimate marginals
+samples_all = []
+for index in sorted_index:
+
+    model_S.load_state_dict(torch.load(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/model_S_{index}.pt'))
+        
+    model_S.eval()
+    with torch.no_grad():
+        samples = model_S.sample(10000)
+        samples = samples.reshape(-1,5)
+        samples = torch.hstack((samples, torch.ones((len(samples),1)).to(device)))
+        samples = inverse_transform_all(samples, pre_parameters['SR']).cpu().detach().numpy()
+        samples_all.append(samples)
+
+samples_all = np.array(samples_all)
+samples_all = np.concatenate(samples_all, axis=0)
+np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/samples.npy', samples_all)
+
+hist_sig = np.histogram(samples_all[:,0], bins=bins, density=True)
+density_sig = rv_histogram(hist_sig)
+
+log_test_mass = np.log(density_sig.pdf(x_test[:,0])+10e-32)
+likelihood_ = log_S - log_B - log_test_mass
+
+likelihood = np.nan_to_num(likelihood_, nan=0, posinf=0, neginf=0)        
+
+
+# compute SIC
+sic_score , tpr_score , auc_score = SIC(x_test[:,-1], likelihood)
+
+figure = plt.figure(figsize=(5,5))
+plt.plot(tpr_score, sic_score)
+plt.xlabel('tpr')
+plt.ylabel('SIC')
+plt.savefig(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/SIC.png')
+if args.wandb:
+    wandb.log({'SIC': wandb.Image(figure)})
+plt.show()
 
 
 # compute SIC

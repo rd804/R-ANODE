@@ -372,11 +372,13 @@ def r_anode_mass_joint(model_S,model_B,w, \
 
         if data_loss_expr == 'true_likelihood':
          #   model_S_log_prob = model_S.log_prob(data_SR[:,1:-1])
-            model_S_log_prob = model_S.log_prob(data_SR[:,:-1])
+            #model_S_log_prob = model_S.log_prob(data_SR[:,:-1])
        #     model_S_log_prob = evaluate_log_prob(model_S, data_SR, params_SR,
         #                                         transform=False)
            # model_B_log_prob = evaluate_log_prob(model_B, data_CR, params_CR,
             #                                     transform=False)
+            model_S_log_prob = evaluate_log_prob_mass(model_S, data_SR, params_SR,
+                                                     transform=True)
             if batch_idx==0:
                 assert model_S_log_prob.shape == model_B_log_prob.shape
                 print(f'value of w: {w}')    
@@ -560,6 +562,23 @@ def anode_RQS(model,train_loader, optimizer, params, device='cpu', mode='train')
     return total_loss
 
 
+def evaluate_log_prob_mass(model, data, preprocessing_params, transform=False, mode='train'):
+    if mode == 'train':
+        logit_prob = model.log_prob(data[:, :-1])
+    else:
+        model.eval()
+        with torch.no_grad():
+            logit_prob = model.log_prob(data[:, :-1])
+       # logit_prob = model.log_prob(data[:, 1:-1])
+    
+    if transform:
+        log_prob = logit_prob.flatten() + torch.log(
+            2 * (1 + torch.cosh(data[:, 0] * preprocessing_params["std"][0] + preprocessing_params["mean"][0]))
+            / (preprocessing_params["std"][0] * (preprocessing_params["max"][0] - preprocessing_params["min"][0]))
+        +1e-32)
+    else:
+        log_prob = logit_prob.flatten()
+    return log_prob
 
 def evaluate_log_prob(model, data, preprocessing_params, transform=False):
     logit_prob = model.log_probs(data[:, 1:-1], data[:,0].reshape(-1,1))
