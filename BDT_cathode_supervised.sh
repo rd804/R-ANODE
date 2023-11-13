@@ -17,15 +17,12 @@ cd /scratch/rd804/m-anode/
 
 #nsig=$1
 
-for nsig in 1000 600 500 450 300 225 150 75
-do
-        python ./scripts/BDT_cathode.py --ensemble_size=50 \
-                --resample \
-                --seed=${SLURM_ARRAY_TASK_ID} \
-                --n_sig=${nsig} \
-                --wandb \
-                --wandb_group='BDT' \
-                --wandb_job_type='IAD_mass_50_'${nsig} \
-                --wandb_run_name='sample'_${SLURM_ARRAY_TASK_ID} \
+python ./scripts/BDT_cathode_supervised.py --ensemble_size=20 \
+        --resample \
+        --seed=${SLURM_ARRAY_TASK_ID} \
+        --n_sig=30000 \
+        --wandb \
+        --wandb_group='BDT' \
+        --wandb_job_type='supervised' \
+        --wandb_run_name='sample'_${SLURM_ARRAY_TASK_ID} \
 
-done

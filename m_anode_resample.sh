@@ -17,14 +17,13 @@ cd /scratch/rd804/m-anode/
 source ~/.bashrc
 conda activate manode
 
-#try_='1'
+#try_=0
 #group_name='test'
 #job_type='ra_undcond'
 #n_sig=1000
 #group_name='nflows_lhc_co'
-#job_type='r_anode_my_model_5'
-#n_sig=1000
-
+#job_type='ra_mass_joint_un_clip'
+#n_sig=225
 
 try_=$1
 group_name=$2
@@ -32,7 +31,7 @@ job_type=$3
 n_sig=$4
 
 
-python scripts/r_anode_lhc_co_mass_joint.py --n_sig=${n_sig} \
+python scripts/r_anode_lhc_co_mass_joint_untransformed.py --n_sig=${n_sig} \
         --mini_batch=256 --mode_background='freeze' --epochs=300 \
         --shuffle_split --resample \
         --split=${SLURM_ARRAY_TASK_ID}  --validation_fraction=0.2 \

@@ -206,12 +206,27 @@ def roc_interp(label, score, tpr_interp):
     
     return tpr_interp, fpr_interp
 
+def SIC_cut_(tpr_list, fpr_list,cut=0.2):
+    fpr_list = np.array(fpr_list)
+    tpr_list = np.array(tpr_list)
+   # eB_list = np.namnp.array(1/fpr_list)
+    cuts = (fpr_list > 1/(312858*cut**2))*1
+   # fpr_list_mx = ma.masked_array(fpr_list, mask=1-cuts, fill_value=np.nan).filled()
+   # tpr_list_mx = ma.masked_array(tpr_list, mask=1-cuts, fill_value=np.nan).filled() 
+    fpr_list = fpr_list[cuts]
+    tpr_list = tpr_list[cuts]
+    sic_list = tpr_list/np.sqrt(fpr_list)
+
+    return sic_list, tpr_list
+
+
 def ensembled_SIC(tpr_list, fpr_list, cut=0.20):
 
     fpr_list = np.array(fpr_list)
     tpr_list = np.array(tpr_list)
    # eB_list = np.namnp.array(1/fpr_list)
     cuts = (fpr_list > 1/(312858*cut**2)).flatten()*1
+    print(cuts.shape)
 
     fpr_list_mx = ma.masked_array(fpr_list, mask=1-cuts, fill_value=np.nan).filled()
     tpr_list_mx = ma.masked_array(tpr_list, mask=1-cuts, fill_value=np.nan).filled() 

@@ -103,9 +103,10 @@ background = background[mask]
 x_train_S = preprocess_params_transform(x_train, pre_parameters) 
 background_S = preprocess_params_transform(background, pre_parameters)
 
-labels = np.concatenate([np.ones(len(x_train_S)), np.zeros(len(background_S))])
+labels = np.concatenate([x_train_S[:,-1], np.zeros(len(background_S))])
+#labels = np.concatenate([np.ones(len(x_train_S)), np.zeros(len(background_S))])
 #data = np.concatenate([x_train_S, background_S])[:,1:-1]
-data = np.concatenate([x_train_S, background_S])[:,:-1]
+data = np.concatenate([x_train_S, background_S])[:,1:-1]
 
 # sample weights using sklearn
 
@@ -123,7 +124,7 @@ x_test = _x_test[mask_test]
 label_test = x_test[:,-1]
 
 #x_test_S = preprocess_params_transform(x_test, pre_parameters)[:,1:-1]
-x_test_S = preprocess_params_transform(x_test, pre_parameters)[:,:-1]
+x_test_S = preprocess_params_transform(x_test, pre_parameters)[:,1:-1]
 print('x_test shape', x_test_S.shape)
 print('x_train shape', x_train_S.shape)
 

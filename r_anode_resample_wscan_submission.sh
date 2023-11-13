@@ -29,9 +29,9 @@ try_=$1
 group_name=$2
 job_type=$3
 w_=$4
-n_sig=500
+n_sig=1000
 
-python scripts/r_anode_lhc_co.py --n_sig=${n_sig} \
+python scripts/r_anode_lhc_co_mass.py --n_sig=${n_sig} \
         --mini_batch=256 --mode_background='freeze' --epochs=300 \
         --shuffle_split --resample \
         --split=${SLURM_ARRAY_TASK_ID}   \

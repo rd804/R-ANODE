@@ -111,18 +111,18 @@ if args.wandb:
 with open(f'{args.CR_path}/pre_parameters.pkl', 'rb') as f:
     pre_parameters_CR = pickle.load(f)
 
-pre_parameters_SR_ = preprocess_params_fit_all(SR_data)
+#pre_parameters_SR_ = preprocess_params_fit_all(SR_data)
 
 pre_parameters_SR = pre_parameters_CR.copy()
-for key in pre_parameters_CR.keys():
-    pre_parameters_SR[key]= np.insert(pre_parameters_CR[key], 0, pre_parameters_SR_[key][0])
+#for key in pre_parameters_CR.keys():
+    #pre_parameters_SR[key]= np.insert(pre_parameters_CR[key], 0, pre_parameters_SR_[key][0])
     
 print('pre_parameters_CR', pre_parameters_CR)
 print('pre_parameters_SR', pre_parameters_SR)
 
 _, mask_CR = logit_transform(SR_data[:,1:-1], pre_parameters_CR['min'],
                              pre_parameters_CR['max'])
-_, mask_SR = logit_transform(SR_data[:,:-1], pre_parameters_SR['min'],
+_, mask_SR = logit_transform(SR_data[:,1:-1], pre_parameters_SR['min'],
                                 pre_parameters_SR['max'])
 
 mask = mask_CR & mask_SR
@@ -132,7 +132,7 @@ x_train = SR_data[mask]
 print('x_train shape', x_train.shape)
 
 # have two seperate transforms of the data for model_S and model_B
-x_train_S = preprocess_params_transform_all(x_train, pre_parameters_SR) 
+x_train_S = preprocess_params_transform(x_train, pre_parameters_SR) 
 x_train_B = preprocess_params_transform(x_train, pre_parameters_CR)
 print('x_train_S shape', x_train_S.shape)
 
@@ -140,12 +140,12 @@ print('x_train_S shape', x_train_S.shape)
 _x_test = np.load(f'{args.data_dir}/x_test.npy')
 _, mask_CR = logit_transform(_x_test[:,1:-1], pre_parameters_CR['min'],
                                 pre_parameters_CR['max'])
-_, mask_SR = logit_transform(_x_test[:,:-1], pre_parameters_SR['min'],
+_, mask_SR = logit_transform(_x_test[:,1:-1], pre_parameters_SR['min'],
                                 pre_parameters_SR['max'])
 mask = mask_CR & mask_SR
 x_test = _x_test[mask]
 x_test_B = preprocess_params_transform(x_test, pre_parameters_CR)
-x_test_S = preprocess_params_transform_all(x_test, pre_parameters_SR)
+x_test_S = preprocess_params_transform(x_test, pre_parameters_SR)
 
 
 if not args.shuffle_split: 
@@ -168,12 +168,15 @@ else:
 
 traintensor_S = torch.from_numpy(data_train_S.astype('float32')).to(device)
 traintensor_B = torch.from_numpy(data_train_B.astype('float32')).to(device)
+traintensor_S[:,0]-=3.5
 
 valtensor_S = torch.from_numpy(data_val_S.astype('float32')).to(device)
 valtensor_B = torch.from_numpy(data_val_B.astype('float32')).to(device)
+valtensor_S[:,0]-=3.5
 
 testtensor_S = torch.from_numpy(x_test_S.astype('float32')).to(device)
 testtensor_B = torch.from_numpy(x_test_B.astype('float32')).to(device)
+testtensor_S[:,0]-=3.5
 
 print('X_train shape', traintensor_S.shape)
 print('X_val shape', valtensor_S.shape)
@@ -237,12 +240,6 @@ train_tensor = torch.utils.data.TensorDataset(traintensor_S, log_B_train_tensor,
 val_tensor = torch.utils.data.TensorDataset(valtensor_S, log_B_val_tensor, val_mass_prob_back)
 
 
-plt.hist(traintensor_S[:,0].cpu().detach().numpy(), bins=50, density=True, label='train')
-plt.hist(traintensor_B[:,0].cpu().detach().numpy(), bins=50, density=True, label='val')
-plt.legend()
-plt.show()
-
-
 # Use the standard pytorch DataLoader
 batch_size = args.batch_size
 trainloader = torch.utils.data.DataLoader(train_tensor, batch_size=batch_size, shuffle=True)
@@ -285,10 +282,10 @@ else:
 
 for epoch in range(args.epochs):
 
-    train_loss = r_anode_mass_joint(model_S,model_B.model,w_,optimizer ,trainloader, 
+    train_loss = r_anode_mass_joint_untransformed(model_S,model_B.model,w_,optimizer ,trainloader, 
                          pre_parameters, device=device, mode='train',\
                           data_loss_expr=args.data_loss_expr)
-    val_loss = r_anode_mass_joint(model_S,model_B.model,w_,optimizer, valloader, 
+    val_loss = r_anode_mass_joint_untransformed(model_S,model_B.model,w_,optimizer, valloader, 
                        pre_parameters, device=device, mode='val',\
                         data_loss_expr=args.data_loss_expr)
 
@@ -325,12 +322,12 @@ for epoch in range(args.epochs):
         if ~(np.isnan(train_loss) or np.isnan(val_loss)):
             model_S.eval()
             with torch.no_grad():
-                x_samples = model_S.sample(len(train_tensor), batch_size=1000)
+                x_samples = model_S.sample(len(train_tensor))
             x_samples = x_samples.reshape(-1,5)
             x_samples = torch.hstack((x_samples, torch.ones((len(x_samples),1)).to(device)))
-            x_samples = inverse_transform_all(x_samples, pre_parameters['SR']).cpu().detach().numpy()
+            x_samples = inverse_transform(x_samples, pre_parameters['SR']).cpu().detach().numpy()
             x_samples = x_samples[~np.isnan(x_samples).any(axis=1)]
-
+            x_samples[:,0]+=3.5
             print('x_samples shape', x_samples.shape)
            # print('all_data shape', all_data.shape)
 
@@ -384,8 +381,8 @@ else:
        # for i, data in enumerate(testloader):
         with torch.no_grad():
                 #log_S_.extend(model_S.log_prob(data[:,:-1]).cpu().detach().numpy().tolist())
-            log_S_ = evaluate_log_prob_mass(model_S, testtensor_S,preprocessing_params=pre_parameters['SR'], transform=True, mode='test').cpu().detach().numpy()
-                                                
+            #log_S_ = evaluate_log_prob_mass(model_S, testtensor_S,preprocessing_params=pre_parameters['SR'], transform=True, mode='test').cpu().detach().numpy()
+            log_S_ = model_S.log_prob(testtensor_S[:,:-1]).cpu().detach().numpy()                                  
            
         #log_S_ = evaluate_log_prob(model_S.model, testtensor_S, 
                                     #pre_parameters['SR'], transform = True).cpu().detach().numpy()
@@ -470,11 +467,13 @@ for index in sorted_index:
         samples = model_S.sample(10000)
         samples = samples.reshape(-1,5)
         samples = torch.hstack((samples, torch.ones((len(samples),1)).to(device)))
-        samples = inverse_transform_all(samples, pre_parameters['SR']).cpu().detach().numpy()
+        samples = inverse_transform(samples, pre_parameters['SR']).cpu().detach().numpy()
         samples_all.append(samples)
+
 
 samples_all = np.array(samples_all)
 samples_all = np.concatenate(samples_all, axis=0)
+samples_all+=3.5
 np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/samples.npy', samples_all)
 
 hist_sig = np.histogram(samples_all[:,0], bins=bins, density=True)
@@ -483,7 +482,7 @@ density_sig = rv_histogram(hist_sig)
 log_test_mass = np.log(density_sig.pdf(x_test[:,0])+10e-32)
 likelihood_ = log_S - log_B - log_test_mass
 
-np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/ensemble_S.npy', log_S - log_test_mass)
+np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{args.wandb_run_name}/ensemble_S.npy', np.exp(log_S - log_test_mass))
 
 likelihood = np.nan_to_num(likelihood_, nan=0, posinf=0, neginf=0)        
 

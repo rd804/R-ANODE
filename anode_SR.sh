@@ -20,7 +20,7 @@ do
    # for sig in 1
     do
         arr=()
-        for j in 0
+        for j in {1..9..1}
         do
             for split in {0..19..1}
             do

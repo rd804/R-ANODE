@@ -4,7 +4,7 @@ all_sig=1
 arr=1	
 group="nflows_lhc_co_w_scan"
 #group="test"
-job_type="r_anode_R_A_500"
+job_type="ra_mass_1000"
 
 source ~/.bashrc
 conda activate manode
@@ -15,7 +15,7 @@ do
     all_sig=()
 
    # for sig in 1
-    for w_ in 0.001 0.002 0.004 0.005
+    for w_ in 0.0001 0.1 0.001 0.01
    # for sig in 0.4 0.5 0.6 0.7
     #for sig in 5
     #for sig in 0.1 0.2 0.8 0.9 5
