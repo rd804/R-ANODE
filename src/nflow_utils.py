@@ -150,7 +150,7 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
     if mode == 'train':
         model_S.train()
 
-        w.requires_grad = w_train
+        #w.requires_grad = w_train
         
             
         if mode_background == 'train' or mode_background == 'pretrained':
@@ -162,7 +162,7 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
     else:
         model_S.eval()
         model_B.eval()
-        w.requires_grad = False
+      #  w.requires_grad = False
 
     total_loss = 0
 
@@ -193,7 +193,13 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
             
             if batch_idx==0:
                 assert model_S.log_prob(data[label==1,:]).shape == model_B.log_prob(data[label==1,:]).shape
-            data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
+
+            if mode == 'train':
+                data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
+            else:
+                with torch.no_grad():
+                    data_p = torch.sigmoid(w) * torch.exp(model_S.log_prob(data[label==1])) + (1-torch.sigmoid(w)) * torch.exp(model_B.log_prob(data[label==1]))
+
             data_loss = torch.log(data_p + 1e-32)
 
         elif data_loss_expr == 'capped_sigmoid':
@@ -301,7 +307,7 @@ def m_anode(model_S,model_B,w,optimizer,data_loader,noise_data=0,noise_context=0
 
  
 
-    return total_loss, w_
+    return total_loss, torch.sigmoid(w)
 
 
 def m_anode_test(model_S,model_B,w,optimizer,data_loader, device='cpu', 

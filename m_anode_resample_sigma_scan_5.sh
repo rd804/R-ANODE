@@ -16,7 +16,7 @@ do
 
    # for sig in 1
     #for sig in 0.1 0.3 0.4 0.5 0.6 0.7 0.8 1 1.5 2 5 10
-    for sig in 0.5 0.01 0.001 0.0001
+    for sig in 0.5 0.01 0.001
    # for sig in 0.4 0.5 0.6 0.7
     #for sig in 5
     #for sig in 0.1 0.2 0.8 0.9 5
@@ -47,7 +47,7 @@ do
                 echo ${try_}
                 sbatch -W --output=/scratch/rd804/m-anode/logs/output/${group}.${job_type}_${sig}.${try_}.out \
                 --error=/scratch/rd804/m-anode/logs/error/${group}.${job_type}_${sig}.${try_}.err \
-                --export=try_=${try_},group=${group},job_type=${job_type},sig=${sig} m_anode_resample.sh ${try_} ${group} ${job_type} ${sig} &
+                --export=try_=${try_},group=${group},job_type=${job_type},sig=${sig} m_anode_resample_5.sh ${try_} ${group} ${job_type} ${sig} &
                 # get job id
             done
     done

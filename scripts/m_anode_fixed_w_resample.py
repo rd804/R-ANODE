@@ -81,13 +81,13 @@ if args.gaussian_dim == 1:
     sig_sigma = 0.5
     back_sigma = 3
 
-    with open('data/true_w.pkl', 'rb') as f:
+    with open('data/toy_model/true_w.pkl', 'rb') as f:
         true_w = pickle.load(f)
 
-    with open('data/background.pkl', 'rb') as f:
+    with open('data/toy_model/background.pkl', 'rb') as f:
         background = pickle.load(f)
 
-    with open('data/data.pkl', 'rb') as f:
+    with open('data/toy_model/data.pkl', 'rb') as f:
         data = pickle.load(f)
 
 elif args.gaussian_dim == 2:
@@ -98,10 +98,10 @@ elif args.gaussian_dim == 2:
 
 
 
-    with open(f'data/background_{args.gaussian_dim}d.pkl', 'rb') as f:
+    with open(f'data/toy_model/background_{args.gaussian_dim}d.pkl', 'rb') as f:
         background = pickle.load(f)
 
-    with open(f'data/data_{args.gaussian_dim}d.pkl', 'rb') as f:
+    with open(f'data/toy_model/data_{args.gaussian_dim}d.pkl', 'rb') as f:
         data = pickle.load(f)
 
 
@@ -109,7 +109,7 @@ elif args.gaussian_dim == 2:
 
 if not args.resample:
 
-    with open(f'data/true_w_{args.gaussian_dim}d.pkl', 'rb') as f:
+    with open(f'data/toy_model/true_w_{args.gaussian_dim}d.pkl', 'rb') as f:
         true_w = pickle.load(f)
 
     sig_train = args.sig_train
@@ -214,7 +214,7 @@ else:
 
 
 if args.w_train:
-    w = torch.tensor(inverse_sigmoid(args.w), requires_grad=False, device=device)
+    w = torch.tensor(inverse_sigmoid(args.w), requires_grad=True, device=device)
 
 else:
     if args.true_w:
@@ -278,12 +278,23 @@ if not os.path.exists(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.
 
 for epoch in range(args.epochs):
 
-    train_loss, w_ = m_anode(model_S,model_B,w,optimizer,trainloader,noise_data=0,noise_context=0, device=device, mode='train',\
-                         mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr,
-                         w_train=args.w_train, cap_sig=args.cap_sig, scale_sig=args.scale_sig, kld_w=args.kld_w)
-    val_loss, w_ = m_anode(model_S,model_B,w,optimizer,valloader,noise_data=0,noise_context=0, device=device, mode='val',\
-                       mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr,
-                       w_train=args.w_train, cap_sig=args.cap_sig, scale_sig=args.scale_sig, kld_w=args.kld_w)
+   # if epoch == 0:
+    print('initial w', w)
+    train_loss, _ = m_anode(model_S,model_B,w,optimizer,trainloader,noise_data=0,noise_context=0, device=device, mode='train',\
+                            mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr,
+                            w_train=args.w_train, cap_sig=args.cap_sig, scale_sig=args.scale_sig, kld_w=args.kld_w)
+    val_loss, _ = m_anode(model_S,model_B,w,optimizer,valloader,noise_data=0,noise_context=0, device=device, mode='val',\
+                        mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr,
+                        w_train=args.w_train, cap_sig=args.cap_sig, scale_sig=args.scale_sig, kld_w=args.kld_w)
+  #  else:
+    #    print('initial w', w_)
+
+    #    train_loss, w_ = m_anode(model_S,model_B,w_,optimizer,trainloader,noise_data=0,noise_context=0, device=device, mode='train',\
+      #                      mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr,
+      #                      w_train=args.w_train, cap_sig=args.cap_sig, scale_sig=args.scale_sig, kld_w=args.kld_w)
+     #   val_loss, w_ = m_anode(model_S,model_B,w_,optimizer,valloader,noise_data=0,noise_context=0, device=device, mode='val',\
+        #                mode_background=args.mode_background, clip_grad=args.clip_grad, data_loss_expr=args.data_loss_expr,
+         #               w_train=args.w_train, cap_sig=args.cap_sig, scale_sig=args.scale_sig, kld_w=args.kld_w)
 
    # if args.data_loss_expr == 'capped_sigmoid':
       #  w_ = capped_sigmoid(w, args.cap_sig).item()
@@ -292,18 +303,19 @@ for epoch in range(args.epochs):
    # else:
     #    w_ = torch.sigmoid(w).item()
     #print(w_)
-    print(w_)
-    w_ = torch.mean(w_).detach().cpu().numpy()
+  #  print(w_)
+   # w_ = torch.mean(w_).detach().cpu().numpy()
 
-    print(w_)
+  #  print(w_)
 
 
     ##################################
     ##############################
     # Save model and weights
-
+    save_w = torch.sigmoid(w).item()
+   # save_w = w_.detach().cpu().numpy()
     torch.save(model_S.state_dict(), f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/model_S_{epoch}.pt')
-    np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/w_{epoch}.npy', w_)
+    np.save(f'results/{args.wandb_group}/{args.wandb_job_type}/{wandb.run.name}/w_{epoch}.npy', save_w)
 
     
     if args.mode_background == 'train' or args.mode_background == 'pretrained':
@@ -314,7 +326,7 @@ for epoch in range(args.epochs):
         wandb.finish()
         break
 
-    wandb.log({'train_loss': train_loss, 'val_loss': val_loss, 'w': w_ , \
+    wandb.log({'train_loss': train_loss, 'val_loss': val_loss, 'w': save_w , \
                'true_w': true_w[str(sig_train)][0]})
 
     valloss.append(val_loss)

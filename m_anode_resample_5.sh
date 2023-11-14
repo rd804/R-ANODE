@@ -22,7 +22,7 @@ group_name=$2
 job_type=$3
 w_=$4
 #sig=$4
-sig=1
+sig=2
 
 
 python scripts/m_anode_fixed_w_resample.py --sig_train=${sig} --sig_test=10 \
