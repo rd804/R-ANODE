@@ -251,7 +251,37 @@ def ensembled_SIC(tpr_list, fpr_list, cut=0.20):
 
     return sic_median, sic_max, sic_min, tpr_median
 
-    
+def ensembled_ROC(tpr_list, fpr_list, cut=0.20):
+
+    fpr_list = np.array(fpr_list)
+    tpr_list = np.array(tpr_list)
+   # eB_list = np.namnp.array(1/fpr_list)
+    cuts = (fpr_list > 1/(312858*cut**2)).flatten()*1
+    print(cuts.shape)
+
+    fpr_list_mx = ma.masked_array(fpr_list, mask=1-cuts, fill_value=np.nan).filled()
+    tpr_list_mx = ma.masked_array(tpr_list, mask=1-cuts, fill_value=np.nan).filled() 
+
+    fpr_median = np.nanmedian(fpr_list_mx, axis=0)
+    fpr_max = np.nanpercentile(fpr_list_mx, 84, axis=0)
+    fpr_min = np.nanpercentile(fpr_list_mx, 16, axis=0)
+
+
+    tpr_median = np.nanmedian(tpr_list_mx, axis=0)
+    cuts = np.argwhere(fpr_median > 1/(312858*cut**2)).flatten()
+
+    tpr_median = tpr_median[cuts]
+    fpr_median = fpr_median[cuts]
+    fpr_max = fpr_max[cuts]
+    fpr_min = fpr_min[cuts]
+
+  #  sic_median = np.nan_to_num(tpr_median/np.sqrt(fpr_median), posinf=0)
+  #  sic_max = np.nan_to_num(tpr_median/np.sqrt(fpr_max), posinf=0)
+  #  sic_min = np.nan_to_num(tpr_median/np.sqrt(fpr_min), posinf=0)
+  #  tpr_median = np.nan_to_num(tpr_median, posinf=0)
+
+    return fpr_median, fpr_max, fpr_min, tpr_median
+
 
 
 

@@ -341,7 +341,7 @@ def r_anode_mass(model_S,model_B,w, \
 
 def r_anode_mass_joint_untransformed(model_S,model_B,w, \
                  optimizer, data_loader, params,scheduler=False ,device='cpu', 
-                 mode='train', data_loss_expr = 'true_likelihood'):
+                 mode='train', data_loss_expr = 'true_likelihood',w_train = False):
     
     n_nans = 0
     if mode == 'train':
@@ -383,11 +383,26 @@ def r_anode_mass_joint_untransformed(model_S,model_B,w, \
                 assert model_S_log_prob.shape == model_B_log_prob.shape
                 print(f'value of w: {w}')    
             
+
+            if mode == 'train':
+
+                if not w_train:
+                    data_p = w*torch.exp(model_S_log_prob) + \
+                    (1-w)*torch.exp(model_B_log_prob)*mass_density_bkg
+                else:
+                    data_p = torch.sigmoid(w)*torch.exp(model_S_log_prob) + \
+                    (1-torch.sigmoid(w))*torch.exp(model_B_log_prob)*mass_density_bkg
+            else:
+                with torch.no_grad():
+                    if not w_train:
+                        data_p = w*torch.exp(model_S_log_prob) + \
+                        (1-w)*torch.exp(model_B_log_prob)*mass_density_bkg
+                    else:
+                        data_p = torch.sigmoid(w)*torch.exp(model_S_log_prob) + \
+                        (1-torch.sigmoid(w))*torch.exp(model_B_log_prob)*mass_density_bkg
             
-            
-            data_p = w*torch.exp(model_S_log_prob) + \
-            (1-w)*torch.exp(model_B_log_prob)*mass_density_bkg
             data_loss = torch.log(data_p + 1e-32)
+
 
         else:
             raise ValueError('only true_likelihood is implemented')

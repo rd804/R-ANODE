@@ -17,7 +17,10 @@ cd /scratch/rd804/m-anode/
 source ~/.bashrc
 conda activate manode
 
-#try_=0
+try_=0
+group_name='nflows_lhco'
+job_type="no_signal_fit"
+
 #group_name='nflows_lhc_co'
 #job_type='ra_w_train'
 #n_sig=1000
@@ -25,22 +28,22 @@ conda activate manode
 #job_type='ra_mass_joint_un_clip'
 #n_sig=225
 
-try_=$1
-group_name=$2
-job_type=$3
-n_sig=$4
+#try_=$1
+#group_name=$2
+#job_type=$3
+#n_sig=$4
 
 
 
 #python scripts/r_anode_lhc_co_mass_joint_untransformed.py --n_sig=${n_sig} \
-python scripts/r_anode_lhc_co_m_joint_w_train.py --n_sig=${n_sig} \
+python scripts/r_anode_lhc_co_m_joint_w_train.py \
         --mini_batch=256 --mode_background='freeze' --epochs=300 \
         --shuffle_split --resample \
         --split=${SLURM_ARRAY_TASK_ID}  --validation_fraction=0.2 \
-        --seed=${try_} --random_w --w_train --w=0.01 \
+        --seed=${try_} --random_w --w_train --no_signal_fit \
         --wandb \
         --wandb_group=${group_name} \
-        --wandb_job_type=${job_type}'_'${n_sig} \
+        --wandb_job_type=${job_type} \
         --wandb_run_name='try_'${try_}'_'${SLURM_ARRAY_TASK_ID} \
         --data_loss_expr='true_likelihood'
 

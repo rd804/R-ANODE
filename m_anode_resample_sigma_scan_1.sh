@@ -18,8 +18,8 @@ do
     all_sig=()
 
    # for sig in 1
-   # for n_sig in 1000 600 500 300 450 225 75 150
-    for n_sig in 1000 75
+    for n_sig in 600 500 300 450 225 150
+   # for n_sig in 1000 75
    # for n_sig in 1000
    # for sig in 0.4 0.5 0.6 0.7
     #for sig in 5
@@ -27,7 +27,7 @@ do
     do
         echo "sigma = ${n_sig}"
         arr=()
-        for j in {1..9..1}
+        for j in {0..9..1}
         do
             for split in {0..19..1}
             do
