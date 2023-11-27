@@ -114,7 +114,7 @@ for k,w in enumerate(weights):
         plt.fill_between(tpr_cut_ranode, sic_min_ranode, sic_max_ranode, alpha=0.3, color=color[k])
 
     else:
-        plt.plot(tpr_cut_ranode, sic_median_ranode, label=f'w=0.006 (true)',linestyle='-', color=color[k])
+        plt.plot(tpr_cut_ranode, sic_median_ranode, label=f'w=0.006 (correct)',linestyle='-', color=color[k])
         plt.fill_between(tpr_cut_ranode, sic_min_ranode, sic_max_ranode, alpha=0.3, color=color[k])
 
     #plt.plot(tpr_cut, sic_median, label=f'Nsig={nsig}', linestyle='--')
@@ -144,7 +144,7 @@ print(weight_array)
 plt.plot(weight_array, _median_sic_RANODE, marker=".", label='R-ANODE')
 #plt.plot(weight_array[~mask], _median_sic_RANODE[~mask], marker="x", label='true w',markersize=10)
 plt.fill_between(weight_array[mask], _sic_min_RANODE[mask], _sic_max_RANODE[mask], alpha=0.3)
-plt.axvline(x=true_w, color='C1', linestyle='--', label='true w')
+plt.axvline(x=true_w, color='C1', linestyle='--', label=r'$w_{correct}$')
 #plt.err
 plt.xlabel(r'$w$',fontsize=15)
 plt.ylabel('max SIC',fontsize=15)
