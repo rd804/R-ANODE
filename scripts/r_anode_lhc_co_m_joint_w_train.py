@@ -114,13 +114,16 @@ print('pre_parameters_SR', pre_parameters_SR)
 #mask = mask_CR & mask_SR
 
 if args.no_signal_fit:
-    background = np.load(f'{args.data_dir}/extrabkg_train_val.npy')
+    #background = np.load(f'{args.data_dir}/extrabkg_train_val.npy')
+    SR_data, CR_data , true_w, sigma = resample_split(args.data_dir, n_sig = args.n_sig, resample_seed = args.seed,resample = args.resample)
+
+    background = SR_data[SR_data[:,-1]==0]
+
     _, mask = logit_transform(background[:,1:-1], pre_parameters_CR['min'],
                                 pre_parameters_CR['max'])
     x_train = background[mask]
-
     print('true background fit ... .. ... .. ...')
-
+   # print('x_train shape', x_train.shape)
     x_train_S = preprocess_params_transform(x_train, pre_parameters_SR)
     x_train_B = preprocess_params_transform(x_train, pre_parameters_CR)
 else:

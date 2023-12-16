@@ -187,6 +187,14 @@ def SIC(label, score):
     return sic, tpr, auc
 
 
+def roc_interp_fpr(label, score, fpr_interp):
+    fpr, tpr, _ = roc_curve(label, score)
+
+
+    tpr_interp = interp1d(fpr, tpr)(fpr_interp)
+    
+    return tpr_interp, fpr_interp
+
 def roc_interp(label, score, tpr_interp):
     fpr, tpr, _ = roc_curve(label, score)
 
@@ -250,6 +258,42 @@ def ensembled_SIC(tpr_list, fpr_list, cut=0.20):
     tpr_median = np.nan_to_num(tpr_median, posinf=0)
 
     return sic_median, sic_max, sic_min, tpr_median
+
+def ensembled_SIC_at_fpr(tpr_list, fpr_list):
+
+    # fpr_list contains the desired fpr values
+
+    fpr_list = np.array(fpr_list)
+    tpr_list = np.array(tpr_list)
+
+
+    tpr_median = np.nanmedian(tpr_list, axis=0)
+    fpr_median = np.nanmedian(fpr_list, axis=0)
+    
+    tpr_max = np.nanpercentile(tpr_list, 84, axis=0)
+    tpr_min = np.nanpercentile(tpr_list, 16, axis=0)
+
+
+    sic_median = np.nan_to_num(tpr_median/np.sqrt(fpr_median), posinf=0)
+    sic_max = np.nan_to_num(tpr_max/np.sqrt(fpr_median), posinf=0)
+    sic_min = np.nan_to_num(tpr_min/np.sqrt(fpr_median), posinf=0)
+
+    return sic_median, sic_max, sic_min, fpr_median
+
+   # eB_list = np.namnp.array(1/fpr_list)
+    #cuts = (fpr_list > 1/(312858*cut**2)).flatten()*1
+    #print(cuts.shape)
+
+   # fpr_list_mx = ma.masked_array(fpr_list, mask=1-cuts, fill_value=np.nan).filled()
+   # tpr_list_mx = ma.masked_array(tpr_list, mask=1-cuts, fill_value=np.nan).filled() 
+
+   # fpr_median = np.nanmedian(fpr_list_mx, axis=0)
+   # fpr_max = np.nanpercentile(fpr_list_mx, 84, axis=0)
+   # fpr_min = np.nanpercentile(fpr_list_mx, 16, axis=0)
+
+
+#    return sic_median, sic_max, sic_min, tpr_median
+
 
 def ensembled_ROC(tpr_list, fpr_list, cut=0.20):
 
