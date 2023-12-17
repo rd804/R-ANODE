@@ -33,7 +33,7 @@ n_sig=$4
 
 
 #python scripts/r_anode_lhc_co_mass_joint_untransformed.py --n_sig=${n_sig} \
-python scripts/r_anode_lhc_co_m_joint_w_train.py --n_sig=${n_sig} \
+python scripts/r_anode_lhc_co_m_joint_w_train_pdata.py --n_sig=${n_sig} \
         --mini_batch=256 --mode_background='freeze' --epochs=300 \
         --shuffle_split --resample \
         --split=${SLURM_ARRAY_TASK_ID}  --validation_fraction=0.2 \
