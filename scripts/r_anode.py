@@ -44,7 +44,7 @@ parser.add_argument('--shuffle_split', action='store_true', help='if shuffle spl
 parser.add_argument('--split', type=int, default=1, help='split number')
 parser.add_argument('--data_dir', type=str, default='data/lhc_co', help='data directory')
 parser.add_argument('--config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
-parser.add_argument('--S_config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
+#parser.add_argument('--S_config_file', type=str, default='scripts/DE_MAF_model.yml', help='config file')
 parser.add_argument('--random_w', action='store_true', help='if random w is used for initialization')
 parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/CR_bn_fixed_1000/try_1_0', help='CR data path')
 #parser.add_argument('--CR_path', type=str, default='results/nflows_lhc_co/CR_RQS_4_1000/try_1_2', help='CR data path')

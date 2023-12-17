@@ -4,7 +4,7 @@ all_sig=1
 arr=1	
 
 group="nflows_lhco"
-job_type="joint_pdata"
+job_type="ideal_pdata"
 
 
 source ~/.bashrc
@@ -16,8 +16,8 @@ do
     all_sig=()
 
    # for sig in 1
-   # for n_sig in 1000 600 500 300 450 225 75 150
-    for n_sig in 600 500 450 225 75 150
+    for n_sig in 1000 600 500 300 450 225 75 150
+   # for n_sig in 600 500 450 225 75 150
 
    # for n_sig in 1000 300 
    # for n_sig in 1000
@@ -51,7 +51,7 @@ do
                 echo ${try_}
                 sbatch -W --output=/scratch/rd804/m-anode/logs/output/${group}.${job_type}_${n_sig}.${try_}.out \
                 --error=/scratch/rd804/m-anode/logs/error/${group}.${job_type}_${n_sig}.${try_}.err \
-                --export=try_=${try_},group=${group},job_type=${job_type},sig=${n_sig} r_anode_learnable.sh ${try_} ${group} ${job_type} ${n_sig} &
+                --export=try_=${try_},group=${group},job_type=${job_type},sig=${n_sig} r_anode_ideal.sh ${try_} ${group} ${job_type} ${n_sig} &
                 # get job id
             done
     done

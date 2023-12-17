@@ -17,22 +17,23 @@ cd /scratch/rd804/m-anode/
 source ~/.bashrc
 conda activate manode
 
-try_=0
-group_name='nflows_lhco'
-job_type="no_signal_fit_pdata"
 
+try_=$1
+group_name=$2
+job_type=$3
+n_sig=$4
 
 
 
 #python scripts/r_anode_lhc_co_mass_joint_untransformed.py --n_sig=${n_sig} \
-python scripts/r_anode.py \
+python scripts/r_anode.py --n_sig=${n_sig} \
         --mini_batch=256 --mode_background='freeze' --epochs=300 \
         --shuffle_split --resample \
         --split=${SLURM_ARRAY_TASK_ID}  --validation_fraction=0.2 \
-        --seed=${try_} --random_w --w_train --no_signal_fit \
+        --seed=${try_} \
         --wandb \
         --wandb_group=${group_name} \
-        --wandb_job_type=${job_type} \
+        --wandb_job_type=${job_type}'_'${n_sig} \
         --wandb_run_name='try_'${try_}'_'${SLURM_ARRAY_TASK_ID} \
         --data_loss_expr='true_likelihood'
 

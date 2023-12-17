@@ -17,13 +17,6 @@ cd /scratch/rd804/m-anode/
 source ~/.bashrc
 conda activate manode
 
-#try_=0
-#group_name='nflows_lhc_co'
-#job_type='ra_w_train'
-#n_sig=1000
-#group_name='nflows_lhc_co'
-#job_type='ra_mass_joint_un_clip'
-#n_sig=225
 
 try_=$1
 group_name=$2
