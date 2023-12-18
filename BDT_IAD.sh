@@ -19,7 +19,7 @@ cd /scratch/rd804/m-anode/
 
 for nsig in 1000 600 500 450 300 225 150 75
 do
-        python ./scripts/BDT_cathode.py --ensemble_size=50 \
+        python ./scripts/BDT_IAD.py --ensemble_size=50 \
                 --resample \
                 --seed=${SLURM_ARRAY_TASK_ID} \
                 --n_sig=${nsig} \

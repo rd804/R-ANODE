@@ -2,9 +2,9 @@
 
 all_sig=1
 arr=1	
-group="nflows_lhc_co"
+group="nflows_lhc_co_nsig_scan"
 #group='test'
-job_type="anode_CR_verify"
+job_type="anode_SR_RQS"
 
 
 source ~/.bashrc
@@ -15,14 +15,14 @@ while ((${#all_sig[@]}))
 do
     all_sig=()
     
-   for n_sig in 1000
+    for n_sig in 75 150 225 300 450 500 600 1000
    # for sig in 0.4 0.5 0.6 0.7
    # for sig in 1
     do
         arr=()
-        for j in 1
+        for j in {0..9..1}
         do
-            for split in {0..1..1}
+            for split in {0..19..1}
             do
                 if [[ ! -f /scratch/rd804/m-anode/results/${group}/${job_type}_${n_sig}/try_${j}_${split}/best_val_loss_scores.npy ]]
                 then
@@ -44,7 +44,7 @@ do
                 echo ${try_}
                 sbatch -W --output=/scratch/rd804/m-anode/logs/output/${group}.${job_type}_${n_sig}.${try_}.out \
                 --error=/scratch/rd804/m-anode/logs/error/${group}.${job_type}_${n_sig}.${try_}.err \
-                --export=try_=${try_},group=${group},job_type=${job_type},sig=${n_sig} nflows_CR.sh ${try_} ${group} ${job_type} ${n_sig} &
+                --export=try_=${try_},group=${group},job_type=${job_type},sig=${n_sig} nflows_SR.sh ${try_} ${group} ${job_type} ${n_sig} &
                 # get job id
             done
     done

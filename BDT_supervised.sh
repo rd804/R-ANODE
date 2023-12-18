@@ -17,7 +17,7 @@ cd /scratch/rd804/m-anode/
 
 #nsig=$1
 
-python ./scripts/BDT_cathode_supervised.py --ensemble_size=20 \
+python ./scripts/BDT_supervised.py --ensemble_size=20 \
         --resample \
         --seed=${SLURM_ARRAY_TASK_ID} \
         --n_sig=30000 \

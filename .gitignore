@@ -12,6 +12,8 @@ SIC*
 *.so
 slurm-*
 # Distribution / packaging
+scripts/w_scan.py
+notebooks/*
 data/*
 figures/*
 models/*

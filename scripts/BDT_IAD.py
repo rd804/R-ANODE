@@ -104,8 +104,8 @@ x_train_S = preprocess_params_transform(x_train, pre_parameters)
 background_S = preprocess_params_transform(background, pre_parameters)
 
 labels = np.concatenate([np.ones(len(x_train_S)), np.zeros(len(background_S))])
-#data = np.concatenate([x_train_S, background_S])[:,1:-1]
-data = np.concatenate([x_train_S, background_S])[:,:-1]
+data = np.concatenate([x_train_S, background_S])[:,1:-1]
+#data = np.concatenate([x_train_S, background_S])[:,:-1]
 
 # sample weights using sklearn
 
@@ -122,21 +122,21 @@ sample_weights = compute_sample_weight(class_weight='balanced', y=labels)
 x_test = _x_test[mask_test]
 label_test = x_test[:,-1]
 
-#x_test_S = preprocess_params_transform(x_test, pre_parameters)[:,1:-1]
-x_test_S = preprocess_params_transform(x_test, pre_parameters)[:,:-1]
+x_test_S = preprocess_params_transform(x_test, pre_parameters)[:,1:-1]
+#x_test_S = preprocess_params_transform(x_test, pre_parameters)[:,:-1]
 print('x_test shape', x_test_S.shape)
 print('x_train shape', x_train_S.shape)
 
-from sklearn.preprocessing import StandardScaler
-data[:,0]-=3.5
-x_test_S[:,0]-=3.5
+# from sklearn.preprocessing import StandardScaler
+# data[:,0]-=3.5
+# x_test_S[:,0]-=3.5
 
-scaler = StandardScaler()
-scaler.fit(data[:,0].reshape(-1,1))
-mass_transformed = scaler.transform(data[:,0].reshape(-1,1))
-data[:,0] = mass_transformed[:,0]
-mass_transformed_test = scaler.transform(x_test_S[:,0].reshape(-1,1))
-x_test_S[:,0] = mass_transformed_test[:,0]
+# scaler = StandardScaler()
+# scaler.fit(data[:,0].reshape(-1,1))
+# mass_transformed = scaler.transform(data[:,0].reshape(-1,1))
+# data[:,0] = mass_transformed[:,0]
+# mass_transformed_test = scaler.transform(x_test_S[:,0].reshape(-1,1))
+# x_test_S[:,0] = mass_transformed_test[:,0]
 
 
 ypred = []

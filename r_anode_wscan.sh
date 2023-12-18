@@ -34,7 +34,7 @@ python scripts/r_anode.py --n_sig=${n_sig} \
         --w_scan --w=${w_} \
         --wandb \
         --wandb_group=${group_name} \
-        --wandb_job_type=${job_type}'_'${n_sig} \
+        --wandb_job_type=${job_type}'_'${w_} \
         --wandb_run_name='try_'${try_}'_'${SLURM_ARRAY_TASK_ID} \
         --data_loss_expr='true_likelihood'
 

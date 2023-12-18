@@ -9,8 +9,8 @@ parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--outdir", type=str, default="preprocessed_data/",
                     help="output directory")
-parser.add_argument("--S_over_sqrtB", type=float, default=-1,
-                    help="Signal over background ratio in the signal region.")
+#parser.add_argument("--S_over_sqrtB", type=float, default=-1,
+ #                   help="Signal over background ratio in the signal region.")
 parser.add_argument("--seed", type=int, default=1,
                     help="random seed for the mixing")
 parser.add_argument("--add_deltaR", action="store_true", default=False,
@@ -130,8 +130,8 @@ if args.data_shift != 0.:
 #data_bg_train_val = dataset_bg[:2*len(dataset_bg)//3]
 #data_bg_test = dataset_bg[2*len(dataset_bg)//3:]
 
-np.save('./input_data/data_bg.npy', dataset_bg)
-np.save('./input_data/data_sig.npy', dataset_sig)
+np.save(f'{args.outdir}/data_bg.npy', dataset_bg)
+np.save(f'{args.outdir}/data_sig.npy', dataset_sig)
 
 print('background: ', len(dataset_bg))
 print('signal: ', len(dataset_sig))
@@ -170,8 +170,8 @@ print('label = 1: ', len(x_test[y_test==1]))
 
 
 
-np.save('./input_data/x_test.npy', x_test)
-np.save('./input_data/y_test.npy', y_test)
+np.save(f'{args.outdir}/x_test.npy', x_test)
+np.save(f'{args.outdir}/y_test.npy', y_test)
 
 
 
