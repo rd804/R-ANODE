@@ -14,6 +14,7 @@ slurm-*
 # Distribution / packaging
 scripts/w_scan.py
 notebooks
+notebooks/*
 data/*
 figures/*
 models/*
