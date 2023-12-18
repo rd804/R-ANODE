@@ -1,13 +1,22 @@
 # Residual ANODE
 
 
-
-For all cases `scripts/r_anode.py` is run with different arguments. The slurm submission script contains the arguments for `r_anode.py` used for each case. The submission loop script submits the slurm submission file, for different arguments $N_{sig}, w,$ split (retrainings of a different train-val split of the same dataset), seed (controls the seed for signal injection). 
+For all cases of R-ANODE `scripts/r_anode.py` is run with different arguments. The slurm submission script contains the arguments for `r_anode.py` used for each case. The submission loop script submits the slurm submission file, for different arguments $N_{sig}, w,$ split (retrainings of a different train-val split of the same dataset), seed (controls the seed for signal injection). 
 
 Note: This project uses slurm job scheduler to submit parallel jobs.
 
+## Download and setup data
+
+`bash run_data_preparation.sh`
+
+## Setup environment
+
+Setup conda environment using `environment.yml` file, and then
+`pip install -e .`
+
 ## Background model
 
+`sbatch nflows_CR.sh`
 
 ## Idealized version
 
@@ -37,13 +46,15 @@ Supervised: `sbatch BDT_supervised.sh`
 
 ## ANODE
 
+Slurm submission: `nflows_SR.sh`
+
+Submission loop: `nflows_SR_submit_loop.sh`
+
 ## SIC curves (Figure 1 and 2)
 
 ## Samples (Figure 5)
 
 ## w-scan result (Figure 3)
-
-`python scripts/w_scan.py`
 
 ## Learnable w results (Figure 4 and 6)
 
