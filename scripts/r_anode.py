@@ -1,8 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
-from src.nflow_utils import *
+#from src.nflow_utils import *
 import os
+import sys
+sys.path.append('/scratch/rd804/m-anode/')
 from src.utils import *
 from src.nflow_utils import *
 from src.generate_data_lhc import *
@@ -131,10 +133,12 @@ else:
     # fit histogram to data
 
     mass = SR_data[:,0]
-    labels = SR_data[:,-1]
+    #labels = SR_data[:,-1]
     bins = np.linspace(3.3, 3.7, 50)
-  
-    hist_back = np.histogram(mass[labels==0], bins=bins, density=True)
+    
+    hist_back = np.histogram(mass, bins=bins, density=True)
+
+    # hist_back = np.histogram(mass[labels==0], bins=bins, density=True)
     density_back = rv_histogram(hist_back)
     #########################################################################
 

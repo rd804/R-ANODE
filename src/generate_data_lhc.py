@@ -2,7 +2,7 @@
 import numpy as np
 import os
 import argparse
-import vector
+#import vector
 from sklearn.model_selection import train_test_split, ShuffleSplit
 from sklearn.utils import shuffle
 
@@ -10,18 +10,18 @@ from sklearn.utils import shuffle
 
 
 
-def deltaR(features_df):
-    j1_vec = vector.array({
-        "px": np.array(features_df[["pxj1"]]),
-        "py": np.array(features_df[["pyj1"]]),
-        "pz": np.array(features_df[["pzj1"]]),
-    })
-    j2_vec = vector.array({
-        "px": np.array(features_df[["pxj2"]]),
-        "py": np.array(features_df[["pyj2"]]),
-        "pz": np.array(features_df[["pzj2"]]),
-    })
-    return j1_vec.deltaR(j2_vec).flatten()
+# def deltaR(features_df):
+#     j1_vec = vector.array({
+#         "px": np.array(features_df[["pxj1"]]),
+#         "py": np.array(features_df[["pyj1"]]),
+#         "pz": np.array(features_df[["pzj1"]]),
+#     })
+#     j2_vec = vector.array({
+#         "px": np.array(features_df[["pxj2"]]),
+#         "py": np.array(features_df[["pyj2"]]),
+#         "pz": np.array(features_df[["pzj2"]]),
+#     })
+#     return j1_vec.deltaR(j2_vec).flatten()
 
 
 def separate_SB_SR(data, minmass, maxmass):

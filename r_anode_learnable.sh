@@ -15,7 +15,7 @@
 cd /scratch/rd804/m-anode/
 
 source ~/.bashrc
-conda activate manode
+#conda activate manode
 
 
 try_=$1
@@ -23,10 +23,12 @@ group_name=$2
 job_type=$3
 n_sig=$4
 
-
+module purge
+module load singularity/3.1.0
 
 #python scripts/r_anode_lhc_co_mass_joint_untransformed.py --n_sig=${n_sig} \
-python scripts/r_anode.py --n_sig=${n_sig} \
+#python scripts/r_anode.py --n_sig=${n_sig} \
+singularity exec --nv /scratch/rd804/ranode_llf_allbdts.sif python -u scripts/r_anode.py --n_sig=${n_sig} \
         --mini_batch=256 --mode_background='freeze' --epochs=300 \
         --shuffle_split --resample \
         --split=${SLURM_ARRAY_TASK_ID}  --validation_fraction=0.2 \
