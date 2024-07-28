@@ -123,8 +123,8 @@ def generate_transformed_samples(model, data, preprocessing_params, device, numb
 
     mass_test = data[:,0].reshape(-1,1).type(torch.FloatTensor).to(device)
     with torch.no_grad():
-       # x_samples = model.sample(len(mass_test), cond_inputs=mass_test)
-        x_samples = model.sample(len(mass_test), mass_test)
+        x_samples = model.sample(len(mass_test), cond_inputs=mass_test)
+       # x_samples = model.sample(len(mass_test), mass_test)
     
     for key in preprocessing_params.keys():
         preprocessing_params[key] = preprocessing_params[key].to(device)
