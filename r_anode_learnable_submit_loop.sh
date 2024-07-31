@@ -19,8 +19,9 @@ do
    # for sig in 1
    # for n_sig in 1000 600 500 300 450 225 75 150
    # for n_sig in 1000 600 500 450 225 75 150 300
+    for n_sig in 600 500 450 225 75 150
 
-    for n_sig in 1000 300 
+   # for n_sig in 1000 300 
    # for n_sig in 1000
    # for sig in 0.4 0.5 0.6 0.7
     #for sig in 5
