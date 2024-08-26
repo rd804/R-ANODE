@@ -18,7 +18,7 @@ source ~/.bashrc
 conda activate manode
 
 try_=0
-group_name='nflows_lhco'
+group_name='nflows_lhco_m_data'
 job_type="no_signal_fit_pdata"
 
 

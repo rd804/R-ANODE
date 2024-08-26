@@ -15,7 +15,7 @@
 cd /scratch/rd804/m-anode/
 
 source ~/.bashrc
-conda activate manode
+conda activate ranode
 
 try_=$1
 group_name=$2

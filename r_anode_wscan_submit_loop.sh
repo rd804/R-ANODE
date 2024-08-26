@@ -2,11 +2,11 @@
 
 all_sig=1
 arr=1	
-group="nflows_lhco"
+group="nflows_lhco_m_data"
 job_type="joint_wscan"
 
 source ~/.bashrc
-conda activate manode
+conda activate ranode
 
 
 while ((${#all_sig[@]}))
