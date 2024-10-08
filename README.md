@@ -50,11 +50,4 @@ Slurm submission: `nflows_SR.sh`
 
 Submission loop: `nflows_SR_submit_loop.sh`
 
-## SIC curves (Figure 1 and 2)
-
-## Samples (Figure 5)
-
-## w-scan result (Figure 3)
-
-## Learnable w results (Figure 4 and 6)
 
